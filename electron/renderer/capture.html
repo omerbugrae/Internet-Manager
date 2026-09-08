@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'none'" />
+    <title>Akıllı yakalama</title>
+    <link rel="stylesheet" href="capture.css" />
+  </head>
+  <body>
+    <header><div><small>INTERNET MANAGER</small><h1>Akıllı yakalama</h1></div><button id="close" aria-label="Paneli kapat">×</button></header>
+    <main>
+      <label for="scan-url">Kopyalanan bağlantı</label>
+      <div class="url-row"><input id="scan-url" type="url" placeholder="https://..." /><button id="scan">Tara</button></div>
+      <div class="pulse" id="scanning" hidden><i></i><span>Bağlantılar inceleniyor…</span></div>
+      <p class="message" id="message">Bir sayfa veya dosya bağlantısını kopyalayıp <kbd>Ctrl Alt D</kbd> tuşlarına bas.</p>
+      <section id="results" hidden>
+        <div class="result-heading"><b id="result-count">0 öğe</b><button id="toggle-all">Tümünü seç</button></div>
+        <div id="items"></div>
+      </section>
+    </main>
+    <footer><span>Yalnızca açık HTTP/HTTPS kaynakları</span><button id="download" disabled>Seçilenleri indir →</button></footer>
+    <script src="capture.js"></script>
+  </body>
+</html>

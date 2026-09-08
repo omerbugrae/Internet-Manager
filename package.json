@@ -1,0 +1,33 @@
+{
+  "name": "internet-manager",
+  "version": "0.4.1",
+  "description": "Electron arayüzlü, Python tabanlı indirme ve yükleme yöneticisi",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "electron .",
+    "check": "node --check electron/main.js && node --check electron/preload.js && node --check electron/renderer/app.js && node --check electron/renderer/capture.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/omerbugrae/Internet-Manager.git"
+  },
+  "keywords": [
+    "download-manager",
+    "upload-manager",
+    "electron",
+    "python"
+  ],
+  "author": "omerbugrae",
+  "license": "GPL-3.0-only",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/omerbugrae/Internet-Manager/issues"
+  },
+  "homepage": "https://github.com/omerbugrae/Internet-Manager#readme",
+  "devDependencies": {
+    "electron": "^44.2.0"
+  },
+  "overrides": {
+    "yauzl": "^3.3.1"
+  }
+}

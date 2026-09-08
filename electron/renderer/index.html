@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:; connect-src 'none'" />
+    <title>Internet Manager</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="titlebar">
+        <div class="logo" aria-hidden="true"><span></span></div>
+        <strong>Internet Manager</strong>
+        <span class="version">v0.4.1</span>
+      </header>
+
+      <aside class="sidebar">
+        <button class="new-transfer" id="new-download-button" type="button">
+          <span aria-hidden="true">＋</span> Yeni indirme
+        </button>
+        <button class="new-upload" id="new-upload-button" type="button"><span>↑</span> Yeni yükleme</button>
+        <nav aria-label="Transfer filtreleri">
+          <button class="nav-item active" type="button"><span>↕</span> Tüm transferler</button>
+          <button class="nav-item" type="button"><span>↓</span> İndirilenler</button>
+          <button class="nav-item" type="button"><span>↑</span> Yüklenenler</button>
+        </nav>
+        <div class="engine-status" id="engine-status"><span></span><b>Motor bekleniyor</b></div>
+        <p class="sidebar-note">İndirme ve yükleme, tek bir sakin kuyrukta.</p>
+      </aside>
+
+      <main class="workspace">
+        <section class="workspace-header">
+          <div>
+            <p class="eyebrow">TRANSFER KUYRUĞU</p>
+            <h1>Dosyaların için<br /><em>açık bir hat.</em></h1>
+          </div>
+          <div class="summary"><b id="active-count">0</b><span>aktif transfer</span></div>
+        </section>
+
+        <section class="queue-toolbar" aria-label="Kuyruk araçları">
+          <label class="select-all"><input id="select-all" type="checkbox" /> Tümünü seç</label>
+          <div class="bulk-actions">
+            <button id="bulk-pause" type="button">Duraklat</button>
+            <button id="bulk-resume" type="button">Devam et</button>
+            <button id="bulk-cancel" type="button">İptal</button>
+          </div>
+          <div class="queue-settings">
+            <label>Eşzamanlı <input id="max-concurrent" type="number" min="1" max="12" value="3" /></label>
+            <label>Genel limit <input id="global-speed-limit" type="number" min="0" value="0" /><span>MB/sn</span></label>
+            <button id="save-queue-settings" type="button">Uygula</button>
+          </div>
+        </section>
+
+        <section class="transfer-board" aria-live="polite">
+          <div class="transfer-rail" aria-hidden="true">
+            <span class="rail-node">↓</span><i></i><span class="rail-node upload">↑</span>
+          </div>
+
+          <div class="empty-state" id="empty-state">
+            <p class="section-label">KUYRUK BOŞ</p>
+            <h2>İlk dosyanı yola çıkar.</h2>
+            <p>HTTP veya HTTPS bağlantısını ekle, kayıt yerini seç ve ilerlemeyi buradan izle.</p>
+            <button class="primary-action" id="empty-download-button" type="button">Bağlantı ekle <span>→</span></button>
+          </div>
+
+          <div class="transfer-list hidden" id="transfer-list"></div>
+        </section>
+      </main>
+    </div>
+
+    <dialog id="download-dialog">
+      <form id="download-form" novalidate>
+        <div class="dialog-heading">
+          <p class="eyebrow">YENİ İNDİRME</p>
+          <button class="icon-button close-dialog" aria-label="Pencereyi kapat" type="button">×</button>
+        </div>
+        <h2>Bağlantıyı nereye indirelim?</h2>
+        <label for="download-url">Dosya bağlantısı</label>
+        <input id="download-url" name="url" type="url" required placeholder="https://example.com/dosya.zip" autocomplete="off" />
+        <label for="download-destination">Kayıt konumu</label>
+        <div class="path-picker">
+          <input id="download-destination" name="destination" type="text" readonly required placeholder="Henüz bir konum seçilmedi" />
+          <button id="choose-destination-button" type="button">Seç</button>
+        </div>
+        <label for="conflict-policy">Aynı isimde dosya varsa</label>
+        <select id="conflict-policy" name="conflictPolicy">
+          <option value="overwrite">Üzerine yaz</option>
+          <option value="rename">Yeni bir ad oluştur</option>
+          <option value="skip">Bu indirmeyi atla</option>
+        </select>
+        <label for="task-speed-limit">Bu indirme için hız limiti</label>
+        <div class="unit-input"><input id="task-speed-limit" type="number" min="0" value="0" /><span>KB/sn</span></div>
+        <p class="form-error hidden" id="form-error" role="alert"></p>
+        <div class="dialog-actions">
+          <button class="text-button close-dialog" type="button">Vazgeç</button>
+          <button class="primary-action" id="start-download-button" type="submit">İndirmeyi başlat</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="upload-dialog">
+      <form id="upload-form" novalidate>
+        <div class="dialog-heading"><p class="eyebrow">YENİ YÜKLEME</p><button class="icon-button close-upload-dialog" aria-label="Pencereyi kapat" type="button">×</button></div>
+        <h2>Dosyaları hedefe gönder.</h2>
+        <label>Yerel dosyalar</label>
+        <div class="path-picker"><input id="upload-files" readonly placeholder="Dosya seçilmedi" /><button id="choose-upload-files" type="button">Seç</button></div>
+        <label for="upload-profile">Bağlantı profili</label>
+        <div class="path-picker"><select id="upload-profile"></select><button id="manage-profiles" type="button">Yönet</button></div>
+        <label for="remote-path">Uzak klasör</label>
+        <input id="remote-path" placeholder="/uploads" value="/" />
+        <label for="upload-conflict">Aynı isimde dosya varsa</label>
+        <select id="upload-conflict"><option value="overwrite">Üzerine yaz</option><option value="rename">Yeni bir ad oluştur</option><option value="skip">Atla</option></select>
+        <label for="upload-speed-limit">Yükleme hız limiti</label>
+        <div class="unit-input"><input id="upload-speed-limit" type="number" min="0" value="0" /><span>KB/sn</span></div>
+        <p class="form-error hidden" id="upload-error" role="alert"></p>
+        <div class="dialog-actions"><button class="text-button close-upload-dialog" type="button">Vazgeç</button><button class="upload-action" type="submit">Yüklemeyi başlat</button></div>
+      </form>
+    </dialog>
+
+    <dialog id="profile-dialog">
+      <form id="profile-form" novalidate>
+        <div class="dialog-heading"><p class="eyebrow">BAĞLANTI PROFİLİ</p><button class="icon-button close-profile-dialog" aria-label="Pencereyi kapat" type="button">×</button></div>
+        <h2>Yeni hedef ekle.</h2>
+        <label for="profile-name">Profil adı</label><input id="profile-name" placeholder="Sunucum" />
+        <label for="profile-provider">Protokol</label><select id="profile-provider"><option value="sftp">SFTP</option><option value="webdav">WebDAV</option></select>
+        <div id="sftp-fields"><label for="profile-host">Sunucu</label><input id="profile-host" placeholder="sftp.example.com" /><label for="profile-port">Port</label><input id="profile-port" type="number" value="22" /></div>
+        <div id="webdav-fields" class="hidden"><label for="profile-url">WebDAV adresi</label><input id="profile-url" type="url" placeholder="https://cloud.example.com/dav" /></div>
+        <label for="profile-username">Kullanıcı adı</label><input id="profile-username" autocomplete="username" />
+        <label for="profile-password">Parola</label><input id="profile-password" type="password" autocomplete="new-password" />
+        <p class="form-error hidden" id="profile-error" role="alert"></p>
+        <div class="profile-list" id="profile-list"></div>
+        <div class="dialog-actions"><button class="text-button close-profile-dialog" type="button">Kapat</button><button class="upload-action" type="submit">Profili kaydet</button></div>
+      </form>
+    </dialog>
+
+    <div class="toast hidden" id="toast" role="status"></div>
+    <script src="app.js"></script>
+  </body>
+</html>
