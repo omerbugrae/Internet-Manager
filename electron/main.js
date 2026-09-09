@@ -1,4 +1,4 @@
-const { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, safeStorage, screen } = require('electron')
+const { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, Menu, nativeImage, nativeTheme, Notification, safeStorage, screen, shell, Tray } = require('electron')
 const { spawn } = require('node:child_process')
 const { createInterface } = require('node:readline')
 const { existsSync, readFileSync, writeFileSync } = require('node:fs')
@@ -7,11 +7,28 @@ const crypto = require('node:crypto')
 
 let mainWindow = null
 let captureWindow = null
+let tray = null
 let engine = null
 let engineReady = false
 const transferCache = new Map()
 const pendingRequests = new Map()
 let engineSettings = { maxConcurrent: 3, globalSpeedLimit: 0 }
+let desktopSettings = null
+
+const DEFAULT_DESKTOP_SETTINGS = {
+  closeToTray: true,
+  notifications: true,
+  launchAtStartup: false,
+  theme: 'system',
+  language: 'tr'
+}
+
+const ACTIVITY_TYPES = new Set([
+  'download.created', 'download.paused', 'download.retrying', 'download.completed',
+  'download.cancelled', 'download.failed', 'upload.created', 'upload.paused',
+  'upload.retrying', 'upload.completed', 'upload.cancelled', 'upload.failed',
+  'upload.skipped', 'engine.error'
+])
 
 function pythonCommand() {
   if (app.isPackaged) {
@@ -68,6 +85,7 @@ function updateTransferCache(message) {
     'upload.queued': 'waiting',
     'upload.progress': 'uploading',
     'upload.paused': 'paused',
+    'upload.retrying': 'retrying',
     'upload.completed': 'completed',
     'upload.cancelled': 'cancelled',
     'upload.failed': 'failed',
@@ -99,12 +117,132 @@ function decryptConnection(record) {
 function publicProfile(record) {
   const connection = decryptConnection(record)
   delete connection.password
+  delete connection.secret_access_key
+  delete connection.session_token
   return { id: record.id, name: record.name, provider: record.provider, connection }
 }
 
 function saveProfileRecords(records) {
   const target = profilesPath()
   writeFileSync(target, JSON.stringify(records, null, 2), 'utf8')
+}
+
+function desktopSettingsPath() {
+  return path.join(app.getPath('userData'), 'desktop-settings.json')
+}
+
+function loadDesktopSettings() {
+  try {
+    const saved = JSON.parse(readFileSync(desktopSettingsPath(), 'utf8'))
+    return {
+      closeToTray: typeof saved.closeToTray === 'boolean' ? saved.closeToTray : true,
+      notifications: typeof saved.notifications === 'boolean' ? saved.notifications : true,
+      launchAtStartup: typeof saved.launchAtStartup === 'boolean' ? saved.launchAtStartup : false,
+      theme: ['system', 'light', 'dark'].includes(saved.theme) ? saved.theme : 'system',
+      language: ['tr', 'en'].includes(saved.language) ? saved.language : 'tr'
+    }
+  } catch {
+    return { ...DEFAULT_DESKTOP_SETTINGS }
+  }
+}
+
+function saveDesktopSettings(settings) {
+  writeFileSync(desktopSettingsPath(), JSON.stringify(settings, null, 2), 'utf8')
+}
+
+function activityPath() {
+  return path.join(app.getPath('userData'), 'activity.json')
+}
+
+function loadActivity() {
+  try {
+    const entries = JSON.parse(readFileSync(activityPath(), 'utf8'))
+    return Array.isArray(entries) ? entries : []
+  } catch {
+    return []
+  }
+}
+
+function recordActivity(message) {
+  if (!ACTIVITY_TYPES.has(message.type)) return
+  try {
+    const transfer = message.transferId ? transferCache.get(message.transferId) : null
+    const entries = loadActivity()
+    entries.unshift({
+      id: crypto.randomUUID(),
+      transferId: message.transferId || null,
+      type: message.type,
+      direction: transfer?.direction || (message.type.startsWith('upload.') ? 'upload' : 'download'),
+      title: transfer
+        ? path.basename(transfer.direction === 'upload' ? transfer.sourcePath : transfer.destination)
+        : null,
+      message: message.message || null,
+      createdAt: new Date().toISOString()
+    })
+    writeFileSync(activityPath(), JSON.stringify(entries.slice(0, 500), null, 2), 'utf8')
+  } catch (error) {
+    console.error(`Aktivite günlüğü yazılamadı: ${error.message}`)
+  }
+}
+
+function showMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) createWindow()
+  mainWindow.show()
+  if (mainWindow.isMinimized()) mainWindow.restore()
+  mainWindow.focus()
+}
+
+function createTray() {
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect x="2" y="2" width="28" height="28" rx="9" fill="#171a2b"/><path d="M8 11h16" stroke="#7778ef" stroke-width="4" stroke-linecap="round"/><path d="M8 21h16" stroke="#ff7d4d" stroke-width="4" stroke-linecap="round"/><circle cx="24" cy="7" r="3" fill="#b9ef6a"/></svg>'
+  const icon = nativeImage.createFromDataURL(`data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`).resize({ width: 16, height: 16 })
+  tray = new Tray(icon)
+  tray.setToolTip('Internet Manager')
+  rebuildTrayMenu()
+  tray.on('double-click', showMainWindow)
+}
+
+function rebuildTrayMenu() {
+  if (!tray) return
+  const english = desktopSettings?.language === 'en'
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: english ? 'Show Internet Manager' : 'Internet Manager’ı göster', click: showMainWindow },
+    { label: english ? 'Smart capture' : 'Akıllı yakalama', click: () => void showCapturePanel() },
+    { type: 'separator' },
+    { label: english ? 'Quit' : 'Çıkış', click: () => { app.isQuitting = true; app.quit() } }
+  ]))
+}
+
+function showTransferNotification(message) {
+  if (!desktopSettings?.notifications || !Notification.isSupported()) return
+  if (!['download.completed', 'download.failed', 'upload.completed', 'upload.failed'].includes(message.type)) return
+  const transfer = transferCache.get(message.transferId)
+  const title = transfer
+    ? path.basename(transfer.direction === 'upload' ? transfer.sourcePath : transfer.destination)
+    : 'Internet Manager'
+  const completed = message.type.endsWith('.completed')
+  const english = desktopSettings.language === 'en'
+  try {
+    const notification = new Notification({
+      title,
+      body: completed
+        ? (english ? 'Transfer completed.' : 'Transfer tamamlandı.')
+        : (message.message || (english ? 'Transfer failed.' : 'Transfer başarısız.'))
+    })
+    notification.on('click', showMainWindow)
+    notification.show()
+  } catch (error) {
+    console.error(`Bildirim gösterilemedi: ${error.message}`)
+  }
+}
+
+function titleBarOverlay() {
+  const dark = desktopSettings?.theme === 'dark' || (desktopSettings?.theme === 'system' && nativeTheme.shouldUseDarkColors)
+  return { color: dark ? '#0e1020' : '#f1f2f8', symbolColor: dark ? '#f2f2fa' : '#17192a', height: 64 }
+}
+
+function windowBackground() {
+  const dark = desktopSettings?.theme === 'dark' || (desktopSettings?.theme === 'system' && nativeTheme.shouldUseDarkColors)
+  return dark ? '#0e1020' : '#f1f2f8'
 }
 
 function startEngine() {
@@ -133,6 +271,8 @@ function startEngine() {
         else if (message.type === 'engine.ack') pending.resolve(message.result)
       }
       updateTransferCache(message)
+      recordActivity(message)
+      showTransferNotification(message)
       if (!(message.type === 'engine.error' && message.requestId)) sendToRenderer(message)
     } catch {
       sendToRenderer({ type: 'engine.error', message: 'Transfer motorundan geçersiz yanıt alındı.' })
@@ -188,13 +328,9 @@ function createWindow() {
     minWidth: 900,
     minHeight: 600,
     show: false,
-    backgroundColor: '#edf3f6',
+    backgroundColor: windowBackground(),
     titleBarStyle: 'hidden',
-    titleBarOverlay: {
-      color: '#edf3f6',
-      symbolColor: '#20313d',
-      height: 44
-    },
+    titleBarOverlay: titleBarOverlay(),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -205,6 +341,13 @@ function createWindow() {
 
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'))
   mainWindow.once('ready-to-show', () => mainWindow.show())
+  mainWindow.on('close', (event) => {
+    if (!app.isQuitting && desktopSettings?.closeToTray) {
+      event.preventDefault()
+      mainWindow.hide()
+    }
+  })
+  mainWindow.on('closed', () => { mainWindow = null })
 }
 
 async function showCapturePanel() {
@@ -222,7 +365,7 @@ async function showCapturePanel() {
       width: 390, height: Math.min(680, area.height - 40),
       x: area.x + area.width - 410, y: area.y + 20,
       show: false, alwaysOnTop: true, skipTaskbar: true,
-      frame: false, resizable: true, backgroundColor: '#edf3f6',
+      frame: false, resizable: true, backgroundColor: windowBackground(),
       webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true }
     })
     captureWindow.loadFile(path.join(__dirname, 'renderer', 'capture.html'))
@@ -334,7 +477,7 @@ ipcMain.handle('profiles:list', () => loadProfileRecords().map(publicProfile))
 
 ipcMain.handle('profiles:save', (_event, profile) => {
   if (!safeStorage.isEncryptionAvailable()) throw new Error('Windows güvenli depolama hizmeti kullanılamıyor.')
-  if (!profile || !['sftp', 'webdav'].includes(profile.provider) || !profile.name?.trim()) {
+  if (!profile || !['sftp', 'webdav', 's3'].includes(profile.provider) || !profile.name?.trim()) {
     throw new Error('Profil bilgileri eksik.')
   }
   if (profile.provider === 'sftp' && (!profile.connection?.host || !profile.connection?.username)) {
@@ -343,12 +486,36 @@ ipcMain.handle('profiles:save', (_event, profile) => {
   if (profile.provider === 'webdav' && (!/^https?:\/\//i.test(profile.connection?.url || '') || !profile.connection?.username)) {
     throw new Error('Geçerli WebDAV adresi ve kullanıcı adı gerekli.')
   }
+  if (profile.provider === 's3' && (!profile.connection?.bucket || !profile.connection?.access_key_id)) {
+    throw new Error('S3 bucket ve erişim anahtarı gerekli.')
+  }
+  if (profile.provider === 's3' && profile.connection?.endpoint_url && !/^https?:\/\//i.test(profile.connection.endpoint_url)) {
+    throw new Error('S3 endpoint HTTP veya HTTPS adresi olmalı.')
+  }
   const records = loadProfileRecords()
   const id = profile.id || crypto.randomUUID()
   const previous = records.find((item) => item.id === id)
-  const previousConnection = previous ? decryptConnection(previous) : {}
-  const connection = { ...previousConnection, ...profile.connection }
-  if (!profile.connection?.password) connection.password = previousConnection.password || ''
+  const previousConnection = previous?.provider === profile.provider ? decryptConnection(previous) : {}
+  let connection
+  if (profile.provider === 'sftp') {
+    connection = {
+      host: profile.connection.host, port: Number(profile.connection.port) || 22,
+      username: profile.connection.username,
+      password: profile.connection.password || previousConnection.password || ''
+    }
+  } else if (profile.provider === 'webdav') {
+    connection = {
+      url: profile.connection.url, username: profile.connection.username,
+      password: profile.connection.password || previousConnection.password || ''
+    }
+  } else {
+    connection = {
+      endpoint_url: profile.connection.endpoint_url || '', region: profile.connection.region || '',
+      bucket: profile.connection.bucket, access_key_id: profile.connection.access_key_id,
+      secret_access_key: profile.connection.secret_access_key || previousConnection.secret_access_key || '',
+      session_token: profile.connection.session_token || previousConnection.session_token || ''
+    }
+  }
   const record = {
     id, name: profile.name.trim(), provider: profile.provider,
     encrypted: safeStorage.encryptString(JSON.stringify(connection)).toString('base64')
@@ -364,11 +531,60 @@ ipcMain.handle('profiles:delete', (_event, profileId) => {
   return true
 })
 
+ipcMain.handle('profiles:export', async () => {
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: 'Bağlantı profillerini dışa aktar', defaultPath: 'internet-manager-profilleri.json',
+    filters: [{ name: 'JSON', extensions: ['json'] }]
+  })
+  if (result.canceled || !result.filePath) return 0
+  const profiles = loadProfileRecords().map(publicProfile)
+  writeFileSync(result.filePath, JSON.stringify({ formatVersion: 1, profiles }, null, 2), 'utf8')
+  return profiles.length
+})
+
+ipcMain.handle('profiles:import', async () => {
+  if (!safeStorage.isEncryptionAvailable()) throw new Error('Windows güvenli depolama hizmeti kullanılamıyor.')
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Bağlantı profillerini içe aktar', properties: ['openFile'],
+    filters: [{ name: 'JSON', extensions: ['json'] }]
+  })
+  if (result.canceled || !result.filePaths[0]) return 0
+  const document = JSON.parse(readFileSync(result.filePaths[0], 'utf8'))
+  if (document?.formatVersion !== 1 || !Array.isArray(document.profiles)) {
+    throw new Error('Bu profil dosyasının biçimi desteklenmiyor.')
+  }
+  const records = loadProfileRecords()
+  let imported = 0
+  for (const profile of document.profiles) {
+    if (!profile?.name || !['sftp', 'webdav', 's3'].includes(profile.provider) || typeof profile.connection !== 'object') continue
+    const connection = { ...profile.connection }
+    delete connection.password
+    delete connection.secret_access_key
+    delete connection.session_token
+    records.push({
+      id: crypto.randomUUID(), name: `${profile.name} (içe aktarıldı)`, provider: profile.provider,
+      encrypted: safeStorage.encryptString(JSON.stringify(connection)).toString('base64')
+    })
+    imported += 1
+  }
+  saveProfileRecords(records)
+  return imported
+})
+
 ipcMain.handle('profiles:test', async (_event, profileId) => {
   const record = loadProfileRecords().find((item) => item.id === profileId)
   if (!record) throw new Error('Bağlantı profili bulunamadı.')
-  await sendCommand('profile.test', { provider: record.provider, connection: decryptConnection(record) })
-  return true
+  return sendCommand('profile.test', { provider: record.provider, connection: decryptConnection(record) }, 30000)
+})
+
+ipcMain.handle('provider:list', async (_event, profileId, remotePath) => {
+  const record = loadProfileRecords().find((item) => item.id === profileId)
+  if (!record) throw new Error('Bağlantı profili bulunamadı.')
+  return sendCommand('provider.list', {
+    provider: record.provider,
+    connection: decryptConnection(record),
+    path: typeof remotePath === 'string' ? remotePath : ''
+  }, 30000)
 })
 
 ipcMain.handle('upload:start', async (_event, input) => {
@@ -390,6 +606,11 @@ ipcMain.handle('upload:cancel', async (_event, transferId) => {
   return true
 })
 
+ipcMain.handle('upload:pause', async (_event, transferId) => {
+  await sendCommand('upload.pause', { transfer_id: transferId })
+  return true
+})
+
 ipcMain.handle('upload:retry', async (_event, transferId) => {
   const transfer = transferCache.get(transferId)
   const profile = loadProfileRecords().find((item) => item.id === transfer?.profileId)
@@ -399,12 +620,62 @@ ipcMain.handle('upload:retry', async (_event, transferId) => {
 })
 
 ipcMain.handle('capture:scan', async (_event, url) => {
-  if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) throw new Error('Panoda geçerli bir HTTP/HTTPS bağlantısı yok.')
+  if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) {
+    return { items: [], error: 'Geçerli bir HTTP/HTTPS bağlantısı gir.' }
+  }
   return sendCommand('scan.start', { url }, 45000)
 })
 
 ipcMain.handle('capture:close', () => {
   captureWindow?.hide()
+  return true
+})
+
+ipcMain.handle('clipboard:write', async (_event, value) => {
+  if (typeof value !== 'string' || !value) return false
+  await clipboard.writeText(value)
+  return true
+})
+
+ipcMain.handle('desktop-settings:get', () => desktopSettings)
+
+ipcMain.handle('desktop-settings:update', (_event, input) => {
+  desktopSettings = {
+    closeToTray: Boolean(input?.closeToTray),
+    notifications: Boolean(input?.notifications),
+    launchAtStartup: Boolean(input?.launchAtStartup),
+    theme: ['system', 'light', 'dark'].includes(input?.theme) ? input.theme : 'system',
+    language: ['tr', 'en'].includes(input?.language) ? input.language : 'tr'
+  }
+  saveDesktopSettings(desktopSettings)
+  app.setLoginItemSettings({
+    openAtLogin: desktopSettings.launchAtStartup,
+    path: process.execPath,
+    args: app.isPackaged ? [] : [app.getAppPath()]
+  })
+  rebuildTrayMenu()
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setTitleBarOverlay(titleBarOverlay())
+  mainWindow?.webContents.send('desktop-settings:changed', desktopSettings)
+  return desktopSettings
+})
+
+ipcMain.handle('activity:list', () => loadActivity())
+ipcMain.handle('activity:clear', () => {
+  writeFileSync(activityPath(), '[]', 'utf8')
+  return true
+})
+
+ipcMain.handle('transfer:open', async (_event, transferId, mode) => {
+  const transfer = transferCache.get(transferId)
+  if (!transfer) throw new Error('Transfer bulunamadı.')
+  const target = transfer.direction === 'upload' ? transfer.sourcePath : transfer.destination
+  if (typeof target !== 'string' || !target) throw new Error('Dosya yolu bulunamadı.')
+  if (mode === 'folder') {
+    shell.showItemInFolder(target)
+    return true
+  }
+  const error = await shell.openPath(target)
+  if (error) throw new Error(error)
   return true
 })
 
@@ -415,8 +686,16 @@ ipcMain.handle('engine:status', () => ({
 }))
 
 app.whenReady().then(() => {
+  app.setAppUserModelId('com.internetmanager.desktop')
+  desktopSettings = loadDesktopSettings()
   startEngine()
   createWindow()
+  createTray()
+  nativeTheme.on('updated', () => {
+    if (desktopSettings.theme === 'system' && mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.setTitleBarOverlay(titleBarOverlay())
+    }
+  })
   const captureShortcut = () => {
     void showCapturePanel().catch((error) => console.error(`Yakalama paneli açılamadı: ${error.message}`))
   }
@@ -425,7 +704,7 @@ app.whenReady().then(() => {
   }
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    showMainWindow()
   })
 })
 

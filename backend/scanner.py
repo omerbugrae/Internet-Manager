@@ -36,7 +36,7 @@ class LinkParser(HTMLParser):
 async def scan_url(url: str) -> dict:
     await ensure_public_url(url)
     timeout = aiohttp.ClientTimeout(total=30, connect=10, sock_read=15)
-    headers = {"User-Agent": "InternetManager/0.4.1"}
+    headers = {"User-Agent": "InternetManager/0.6.0"}
     async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
         async with session.get(url, allow_redirects=True) as response:
             await ensure_public_url(str(response.url))

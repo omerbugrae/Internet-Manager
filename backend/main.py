@@ -19,10 +19,10 @@ from downloader import (
     partial_size,
     user_facing_error,
 )
-from protocol import BulkPayload, Command, DownloadPayload, PriorityPayload, ProfileTestPayload, ScanPayload, SettingsPayload, TransferPayload, UploadPayload, UploadRetryPayload
+from protocol import BulkPayload, Command, DownloadPayload, PriorityPayload, ProfileTestPayload, ProviderListPayload, ScanPayload, SettingsPayload, TransferPayload, UploadPayload, UploadRetryPayload
 from scanner import scan_url
 from storage import TransferStore, public_transfer
-from uploader import test_connection, upload_error, upload_file
+from uploader import list_remote, test_connection, upload_error, upload_file
 
 
 class TransferEngine:
@@ -138,42 +138,66 @@ class TransferEngine:
                 return
 
     async def finish_stopped(self, record: dict[str, Any], reason: str) -> None:
+        latest = self.store.get(record["id"]) or record
         status = "cancelled" if reason == "cancel" else "paused"
         if status == "cancelled" and record["direction"] == "download":
             cleanup_partial_artifacts(Path(record["partial_path"]))
-        downloaded = 0 if status == "cancelled" else (self.artifact_size(record) if record["direction"] == "download" else record["downloaded_bytes"])
+        downloaded = 0 if status == "cancelled" else (self.artifact_size(latest) if latest["direction"] == "download" else latest["downloaded_bytes"])
         self.store.update(record["id"], status=status, downloaded_bytes=downloaded, error=None)
         self.emit({"type": f"{record['direction']}.{status}", "transferId": record["id"], "downloadedBytes": downloaded, "uploadedBytes": downloaded})
 
     async def run_upload(self, transfer_id: str, control: TransferControl) -> None:
-        record = self.store.get(transfer_id)
         connection = self.upload_connections.get(transfer_id)
-        if record is None or connection is None:
+        if connection is None:
             self.store.update(transfer_id, status="failed", error="Bağlantı profili yeniden seçilmeli.")
             self.emit({"type": "upload.failed", "transferId": transfer_id, "message": "Bağlantı profili yeniden seçilmeli."})
             return
-        self.store.update(transfer_id, status="uploading", error=None)
+        while True:
+            record = self.store.get(transfer_id)
+            if record is None:
+                return
+            self.store.update(transfer_id, status="uploading", error=None)
 
-        def handle_event(message: dict[str, Any]) -> None:
-            amount = message.get("downloadedBytes", message.get("uploadedBytes", 0))
-            if message["type"] == "download.progress":
-                message["type"] = "upload.progress"
-                message["uploadedBytes"] = amount
-            self.store.update(transfer_id, status="uploading", downloaded_bytes=amount, total_bytes=message.get("totalBytes"))
-            self.emit(message)
+            def handle_event(message: dict[str, Any]) -> None:
+                amount = message.get("downloadedBytes", message.get("uploadedBytes", 0))
+                if message["type"] == "download.progress":
+                    message["type"] = "upload.progress"
+                    message["uploadedBytes"] = amount
+                self.store.update(transfer_id, status="uploading", downloaded_bytes=amount, total_bytes=message.get("totalBytes"))
+                self.emit(message)
 
-        try:
-            result = await upload_file(record, connection, handle_event, control, self.global_limiter)
-            status = "skipped" if result.get("skipped") else "completed"
-            amount = result.get("uploadedBytes", 0)
-            self.store.update(transfer_id, status=status, downloaded_bytes=amount, total_bytes=result.get("totalBytes"), error=None)
-            self.emit({"type": f"upload.{status}", "transferId": transfer_id, **result})
-        except TransferStopped as stopped:
-            await self.finish_stopped(record, stopped.reason)
-        except Exception as error:
-            message = upload_error(error)
-            self.store.update(transfer_id, status="failed", error=message)
-            self.emit({"type": "upload.failed", "transferId": transfer_id, "message": message})
+            try:
+                result = await upload_file(
+                    record, connection, handle_event, control, self.global_limiter,
+                    self.store.get_upload_session, self.store.save_upload_session,
+                    self.store.clear_upload_session,
+                )
+                status = "skipped" if result.get("skipped") else "completed"
+                amount = result.get("uploadedBytes", 0)
+                self.store.update(transfer_id, status=status, downloaded_bytes=amount, total_bytes=result.get("totalBytes"), error=None)
+                self.emit({"type": f"upload.{status}", "transferId": transfer_id, **result})
+                return
+            except TransferStopped as stopped:
+                await self.finish_stopped(record, stopped.reason)
+                return
+            except Exception as error:
+                latest = self.store.get(transfer_id)
+                retry_count = (latest["retry_count"] if latest else 0) + 1
+                max_retries = latest["max_retries"] if latest else 3
+                message = upload_error(error)
+                if retry_count <= max_retries and not control.stop_event.is_set():
+                    delay = 2 ** retry_count
+                    self.store.update(transfer_id, status="retrying", retry_count=retry_count, error=message)
+                    self.emit({"type": "upload.retrying", "transferId": transfer_id, "retryCount": retry_count, "maxRetries": max_retries, "retryInSeconds": delay, "message": message})
+                    try:
+                        await asyncio.wait_for(control.stop_event.wait(), timeout=delay)
+                        await self.finish_stopped(record, control.reason)
+                        return
+                    except asyncio.TimeoutError:
+                        continue
+                self.store.update(transfer_id, status="failed", retry_count=retry_count, error=message)
+                self.emit({"type": "upload.failed", "transferId": transfer_id, "message": message})
+                return
 
     def artifact_size(self, record: dict[str, Any]) -> int:
         partial = Path(record["partial_path"])
@@ -199,7 +223,7 @@ class TransferEngine:
         record = self.store.get(transfer_id)
         if record is None:
             return
-        if record["direction"] == "upload" and action in {"pause", "resume"}:
+        if record["direction"] == "upload" and record["provider"] != "s3" and action in {"pause", "resume"}:
             return
         control = self.controls.get(transfer_id)
         if action == "pause":
@@ -209,7 +233,11 @@ class TransferEngine:
                 control.stop("pause")
             elif record["status"] == "waiting":
                 self.store.update(transfer_id, status="paused")
-                self.emit({"type": "download.paused", "transferId": transfer_id, "downloadedBytes": self.artifact_size(record)})
+                amount = self.artifact_size(record) if record["direction"] == "download" else record["downloaded_bytes"]
+                self.emit({
+                    "type": f"{record['direction']}.paused", "transferId": transfer_id,
+                    "downloadedBytes": amount, "uploadedBytes": amount,
+                })
         elif action == "cancel":
             if record["status"] not in {"waiting", "downloading", "uploading", "retrying", "paused", "failed"}:
                 return
@@ -296,9 +324,9 @@ class TransferEngine:
             self.emit({"type": "upload.created", **public_transfer(record)})
             self.queue(payload.transfer_id)
             return {"transferId": payload.transfer_id}
-        elif command.type == "upload.cancel":
+        elif command.type in {"upload.pause", "upload.cancel"}:
             payload = TransferPayload.model_validate(command.payload)
-            await self.act_on_transfer(payload.transfer_id, "cancel")
+            await self.act_on_transfer(payload.transfer_id, command.type.split(".")[1])
         elif command.type == "upload.retry":
             payload = UploadRetryPayload.model_validate(command.payload)
             self.upload_connections[payload.transfer_id] = payload.connection
@@ -306,14 +334,17 @@ class TransferEngine:
             self.queue(payload.transfer_id)
         elif command.type == "profile.test":
             payload = ProfileTestPayload.model_validate(command.payload)
-            await test_connection(payload.provider, payload.connection)
+            return await test_connection(payload.provider, payload.connection)
+        elif command.type == "provider.list":
+            payload = ProviderListPayload.model_validate(command.payload)
+            return await list_remote(payload.provider, payload.connection, payload.path)
         elif command.type == "scan.start":
             payload = ScanPayload.model_validate(command.payload)
             return await scan_url(str(payload.url))
         return None
 
     async def run(self) -> None:
-        self.emit({"type": "engine.ready", "version": "0.4.1"})
+        self.emit({"type": "engine.ready", "version": "0.6.0"})
         self.snapshot()
         while True:
             command = await self.commands.get()

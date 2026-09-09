@@ -17,6 +17,79 @@ let uploadFiles = []
 let editingProfileId = null
 const uploadDialog = document.querySelector('#upload-dialog')
 const profileDialog = document.querySelector('#profile-dialog')
+const remoteDialog = document.querySelector('#remote-dialog')
+let remoteBrowserPath = '/'
+const settingsDialog = document.querySelector('#settings-dialog')
+const activityDialog = document.querySelector('#activity-dialog')
+const detailsDialog = document.querySelector('#details-dialog')
+let desktopSettings = { closeToTray: true, notifications: true, launchAtStartup: false, theme: 'system', language: 'tr' }
+let currentTransferFilter = 'all'
+let detailsTransferId = null
+
+const translations = {
+  tr: {
+    newDownload: 'Yeni indirme', newUpload: 'Yeni yükleme', allTransfers: 'Tüm transferler', downloads: 'İndirilenler', uploads: 'Yüklenenler',
+    activity: 'Aktivite', settings: 'Ayarlar', desktopSettings: 'MASAÜSTÜ AYARLARI', settingsTitle: 'Uygulama sana ayak uydursun.',
+    closeToTray: 'Kapatınca arka planda çalış', closeToTrayHelp: 'Pencere kapanır, transferler sistem tepsisinde sürer.',
+    notifications: 'Bildirimler', notificationsHelp: 'Tamamlanan ve başarısız transferleri bildir.', launchAtStartup: 'Windows ile başlat',
+    launchAtStartupHelp: 'Oturum açıldığında Internet Manager hazır olsun.', theme: 'Tema', language: 'Dil', themeSystem: 'Sistem', themeLight: 'Açık', themeDark: 'Koyu',
+    shortcuts: 'Kısayollar', smartCapture: 'Akıllı yakalama', cancel: 'Vazgeç', saveSettings: 'Ayarları kaydet', activityLog: 'AKTİVİTE GÜNLÜĞÜ',
+    activityTitle: 'Hattın yakın geçmişi.', all: 'Tümü', errors: 'Hatalar', clear: 'Temizle', transferDetails: 'TRANSFER AYRINTILARI', openFolder: 'Klasörü aç', openFile: 'Dosyayı aç',
+    engineWaiting: 'Motor bekleniyor', engineReady: 'Motor hazır', engineError: 'Motor hatası', sidebarNote: 'Bağlantıyı bırak.\nRotayı biz yönetelim.',
+    liveDesk: 'CANLI TRANSFER MASASI', heroLine1: 'Akış burada.', heroLine2: 'Kontrol sende.', activeTransfer: 'aktif transfer',
+    selectAll: 'Tümünü seç', pause: 'Duraklat', resume: 'Devam et', reconnect: 'Yeniden bağlan', retry: 'Yeniden dene', copyAddress: 'Adresi kopyala',
+    cancelAction: 'İptal', concurrent: 'Eşzamanlı', globalLimit: 'Genel limit', unitMbps: 'MB/sn', apply: 'Uygula', details: 'Ayrıntılar',
+    queueEmpty: 'KUYRUK BOŞ', emptyTitle: 'İlk rotayı oluştur.', emptyBody: 'Bir bağlantı ekle veya dosyayı pencereye bırak. Kuyruk, hız ve hedef tek masadan yönetilsin.', newRoute: 'Yeni rota',
+    newDownloadEyebrow: 'YENİ İNDİRME', closeWindow: 'Pencereyi kapat', downloadHeading: 'Bağlantıyı nereye indirelim?', fileLink: 'Dosya bağlantısı',
+    saveLocation: 'Kayıt konumu', noLocationChosen: 'Henüz bir konum seçilmedi', choose: 'Seç', ifSameName: 'Aynı isimde dosya varsa',
+    overwrite: 'Üzerine yaz', renameNew: 'Yeni bir ad oluştur', skipThis: 'Bu indirmeyi atla', skip: 'Atla', taskSpeedLimit: 'Bu indirme için hız limiti',
+    discard: 'Vazgeç', startDownload: 'İndirmeyi başlat',
+    newUploadEyebrow: 'YENİ YÜKLEME', uploadHeading: 'Dosyaları hedefe gönder.', localFiles: 'Yerel dosyalar', noFileChosen: 'Dosya seçilmedi',
+    connectionProfile: 'Bağlantı profili', manage: 'Yönet', remoteFolder: 'Uzak klasör', browse: 'Göz at',
+    capabilityNoteDefault: 'Profil seçildiğinde hedef yetenekleri burada görünür.', uploadSpeedLimit: 'Yükleme hız limiti', startUpload: 'Yüklemeyi başlat',
+    connectionProfileEyebrow: 'BAĞLANTI PROFİLİ', newTarget: 'Yeni hedef ekle.', profileName: 'Profil adı', protocol: 'Protokol',
+    server: 'Sunucu', port: 'Port', webdavAddress: 'WebDAV adresi', username: 'Kullanıcı adı', password: 'Parola',
+    s3Endpoint: 'S3 endpoint', optional: 'isteğe bağlı', region: 'Bölge', bucket: 'Bucket', accessKeyId: 'Access key ID',
+    secretAccessKey: 'Secret access key', sessionToken: 'Session token', importProfiles: 'İçe aktar', exportProfiles: 'Dışa aktar',
+    secretsNotWritten: 'Parolalar ve gizli anahtarlar dosyaya yazılmaz.', close: 'Kapat', saveProfile: 'Profili kaydet',
+    remoteTargetEyebrow: 'UZAK HEDEF', addFolderToRoute: 'Klasörü rotaya ekle.', parentFolder: 'Üst klasör', foldersLoading: 'Klasörler getiriliyor…', selectThisFolder: 'Bu klasörü seç',
+    transferFilters: 'Transfer filtreleri', s3Compatible: 'S3 uyumlu', activityFilter: 'Aktivite filtresi',
+    selectTransfer: 'Transferi seç', downloadProgress: 'İndirme ilerlemesi'
+  },
+  en: {
+    newDownload: 'New download', newUpload: 'New upload', allTransfers: 'All transfers', downloads: 'Downloads', uploads: 'Uploads',
+    activity: 'Activity', settings: 'Settings', desktopSettings: 'DESKTOP SETTINGS', settingsTitle: 'Make the app work your way.',
+    closeToTray: 'Keep running when closed', closeToTrayHelp: 'The window closes while transfers continue in the system tray.',
+    notifications: 'Notifications', notificationsHelp: 'Notify when transfers complete or fail.', launchAtStartup: 'Launch with Windows',
+    launchAtStartupHelp: 'Keep Internet Manager ready after sign-in.', theme: 'Theme', language: 'Language', themeSystem: 'System', themeLight: 'Light', themeDark: 'Dark',
+    shortcuts: 'Shortcuts', smartCapture: 'Smart capture', cancel: 'Cancel', saveSettings: 'Save settings', activityLog: 'ACTIVITY LOG',
+    activityTitle: 'The line’s recent history.', all: 'All', errors: 'Errors', clear: 'Clear', transferDetails: 'TRANSFER DETAILS', openFolder: 'Open folder', openFile: 'Open file',
+    engineWaiting: 'Engine starting', engineReady: 'Engine ready', engineError: 'Engine error', sidebarNote: 'Let go of the connection.\nWe’ll manage the route.',
+    liveDesk: 'LIVE TRANSFER DESK', heroLine1: 'The flow is here.', heroLine2: 'You’re in control.', activeTransfer: 'active transfer',
+    selectAll: 'Select all', pause: 'Pause', resume: 'Resume', reconnect: 'Reconnect', retry: 'Retry', copyAddress: 'Copy address',
+    cancelAction: 'Cancel', concurrent: 'Concurrent', globalLimit: 'Global limit', unitMbps: 'MB/s', apply: 'Apply', details: 'Details',
+    queueEmpty: 'QUEUE EMPTY', emptyTitle: 'Start your first route.', emptyBody: 'Add a link or drop a file onto the window. Queue, speed, and destination — one desk.', newRoute: 'New route',
+    newDownloadEyebrow: 'NEW DOWNLOAD', closeWindow: 'Close window', downloadHeading: 'Where should we download this to?', fileLink: 'File link',
+    saveLocation: 'Save location', noLocationChosen: 'No location chosen yet', choose: 'Choose', ifSameName: 'If a file with the same name exists',
+    overwrite: 'Overwrite', renameNew: 'Create a new name', skipThis: 'Skip this download', skip: 'Skip', taskSpeedLimit: 'Speed limit for this download',
+    discard: 'Discard', startDownload: 'Start download',
+    newUploadEyebrow: 'NEW UPLOAD', uploadHeading: 'Send files to their destination.', localFiles: 'Local files', noFileChosen: 'No file chosen',
+    connectionProfile: 'Connection profile', manage: 'Manage', remoteFolder: 'Remote folder', browse: 'Browse',
+    capabilityNoteDefault: 'Destination capabilities appear here once a profile is chosen.', uploadSpeedLimit: 'Upload speed limit', startUpload: 'Start upload',
+    connectionProfileEyebrow: 'CONNECTION PROFILE', newTarget: 'Add a new destination.', profileName: 'Profile name', protocol: 'Protocol',
+    server: 'Server', port: 'Port', webdavAddress: 'WebDAV address', username: 'Username', password: 'Password',
+    s3Endpoint: 'S3 endpoint', optional: 'optional', region: 'Region', bucket: 'Bucket', accessKeyId: 'Access key ID',
+    secretAccessKey: 'Secret access key', sessionToken: 'Session token', importProfiles: 'Import', exportProfiles: 'Export',
+    secretsNotWritten: 'Passwords and secret keys are never written to the file.', close: 'Close', saveProfile: 'Save profile',
+    remoteTargetEyebrow: 'REMOTE TARGET', addFolderToRoute: 'Add a folder to the route.', parentFolder: 'Parent folder', foldersLoading: 'Fetching folders…', selectThisFolder: 'Select this folder',
+    transferFilters: 'Transfer filters', s3Compatible: 'S3 compatible', activityFilter: 'Activity filter',
+    selectTransfer: 'Select transfer', downloadProgress: 'Download progress'
+  }
+}
+
+function t(key) {
+  return translations[desktopSettings.language]?.[key] || translations.tr[key] || key
+}
 
 function showDialog() {
   form.reset()
@@ -68,7 +141,7 @@ form.addEventListener('submit', async (event) => {
       url,
       destination: destinationInput.value,
       conflictPolicy: conflictPolicy.value,
-      speedLimit: Math.max(Number(taskSpeedLimit.value) || 0, 0) * 1024
+      speedLimit: Math.max(Number(taskSpeedLimit.value) || 0, 0) * 1024 * 1024
     })
     if (result.skipped) {
       closeDialog()
@@ -110,12 +183,12 @@ function ensureTransfer(record) {
   card.className = `transfer-card ${record.direction || 'download'}`
   card.dataset.transferId = record.transferId
   card.innerHTML = `
-    <input class="transfer-select" type="checkbox" aria-label="Transferi seç" />
+    <input class="transfer-select" type="checkbox" aria-label="${t('selectTransfer')}" />
     <div class="file-glyph" aria-hidden="true">${record.direction === 'upload' ? '↑' : '↓'}</div>
     <div class="transfer-info">
       <p class="transfer-title"></p>
       <div class="transfer-meta"><span class="status"></span><span class="mode-badge"></span><span class="size"></span><span class="speed">—</span><span class="remaining">—</span></div>
-      <div class="progress-track" role="progressbar" aria-label="İndirme ilerlemesi" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="progress-fill"></div></div>
+      <div class="progress-track" role="progressbar" aria-label="${t('downloadProgress')}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="progress-fill"></div></div>
     </div>
     <div class="card-actions"></div>`
   const transfer = {
@@ -152,15 +225,18 @@ function renderTransfer(transfer) {
   card.querySelector('.speed').textContent = transfer.speed || '—'
   card.querySelector('.remaining').textContent = transfer.remaining || '—'
   card.querySelector('.progress-fill').style.width = `${percent}%`
+  card.querySelector('.progress-track').setAttribute('aria-label', transfer.direction === 'upload' ? 'Yükleme ilerlemesi' : 'İndirme ilerlemesi')
   card.querySelector('.progress-track').setAttribute('aria-valuenow', String(Math.round(percent)))
   renderActions(transfer)
   transfer.active = ['waiting', 'downloading', 'uploading', 'retrying'].includes(transfer.status)
+  card.classList.toggle('filter-hidden', currentTransferFilter !== 'all' && (transfer.direction || 'download') !== currentTransferFilter)
   updateBoard()
 }
 
 function renderActions(transfer) {
   const container = transfer.card.querySelector('.card-actions')
   container.replaceChildren()
+  container.append(actionButton(t('details'), () => showTransferDetails(transfer)))
   if (transfer.status === 'waiting') {
     const priority = document.createElement('div')
     priority.className = 'priority-controls'
@@ -169,13 +245,23 @@ function renderActions(transfer) {
     container.append(priority)
   }
   if (['waiting', 'downloading', 'uploading', 'retrying'].includes(transfer.status)) {
-    if (transfer.direction !== 'upload') container.append(actionButton('Duraklat', () => performAction(transfer, 'pause')))
-    container.append(actionButton('İptal', () => performAction(transfer, 'cancel')))
+    if (transfer.direction !== 'upload' || transfer.provider === 's3') {
+      container.append(actionButton(t('pause'), () => performAction(transfer, 'pause')))
+    }
+    container.append(actionButton(t('cancelAction'), () => performAction(transfer, 'cancel')))
   } else if (transfer.status === 'paused') {
-    container.append(actionButton(transfer.direction === 'upload' ? 'Yeniden bağlan' : 'Devam et', () => performAction(transfer, 'resume')))
-    container.append(actionButton('İptal', () => performAction(transfer, 'cancel')))
+    container.append(actionButton(transfer.direction === 'upload' ? t('reconnect') : t('resume'), () => performAction(transfer, 'resume')))
+    container.append(actionButton(t('cancelAction'), () => performAction(transfer, 'cancel')))
   } else if (transfer.status === 'failed') {
-    container.append(actionButton('Yeniden dene', () => performAction(transfer, 'retry')))
+    container.append(actionButton(t('retry'), () => performAction(transfer, 'retry')))
+  } else if (['pausing', 'cancelling'].includes(transfer.status)) {
+    container.append(actionButton(t('cancelAction'), () => performAction(transfer, 'cancel')))
+  }
+  if (transfer.shareUrl) {
+    container.append(actionButton(t('copyAddress'), async () => {
+      await window.internetManager.copyText(transfer.shareUrl)
+      showToast(desktopSettings.language === 'en' ? 'Remote object address copied to clipboard.' : 'Uzak nesne adresi panoya kopyalandı.')
+    }))
   }
 }
 
@@ -198,6 +284,7 @@ async function changePriority(transfer, change) {
 async function performAction(transfer, action) {
   if (transfer.direction === 'upload') {
     try {
+      if (action === 'pause') await window.internetManager.pauseUpload(transfer.transferId)
       if (action === 'cancel') await window.internetManager.cancelUpload(transfer.transferId)
       if (action === 'retry') await window.internetManager.retryUpload(transfer.transferId)
       if (action === 'resume') await window.internetManager.retryUpload(transfer.transferId)
@@ -225,7 +312,7 @@ async function performAction(transfer, action) {
 
 window.internetManager.onTransferEvent((message) => {
   if (message.type === 'engine.ready') {
-    setEngineStatus('ready', 'Motor hazır')
+    setEngineStatus('ready', 'engineReady')
     return
   }
   if (message.type === 'transfers.snapshot') {
@@ -233,7 +320,7 @@ window.internetManager.onTransferEvent((message) => {
     return
   }
   if (message.type === 'engine.error') {
-    setEngineStatus('error', 'Motor hatası')
+    setEngineStatus('error', 'engineError')
     showToast(message.message)
     return
   }
@@ -261,14 +348,16 @@ window.internetManager.onTransferEvent((message) => {
     'download.retrying': 'retrying',
     'download.completed': 'completed',
     'download.cancelled': 'cancelled',
-    'download.failed': 'failed'
-    , 'upload.queued': 'waiting'
-    , 'upload.started': 'uploading'
-    , 'upload.progress': 'uploading'
-    , 'upload.completed': 'completed'
-    , 'upload.cancelled': 'cancelled'
-    , 'upload.failed': 'failed'
-    , 'upload.skipped': 'skipped'
+    'download.failed': 'failed',
+    'upload.queued': 'waiting',
+    'upload.started': 'uploading',
+    'upload.progress': 'uploading',
+    'upload.paused': 'paused',
+    'upload.retrying': 'retrying',
+    'upload.completed': 'completed',
+    'upload.cancelled': 'cancelled',
+    'upload.failed': 'failed',
+    'upload.skipped': 'skipped'
   }
   transfer.status = eventStatus[message.type] || transfer.status
   const transferredBytes = message.uploadedBytes ?? message.downloadedBytes
@@ -286,6 +375,8 @@ window.internetManager.onTransferEvent((message) => {
   transfer.connections = message.connections ?? transfer.connections
   transfer.retryInSeconds = message.retryInSeconds
   transfer.error = message.message || transfer.error
+  transfer.resumable = message.resumable ?? transfer.resumable
+  transfer.shareUrl = message.shareUrl ?? transfer.shareUrl
   renderTransfer(transfer)
 
   if (message.restarted) showToast('Sunucu devam ettirmeyi desteklemedi; indirme güvenle baştan başladı.')
@@ -293,10 +384,15 @@ window.internetManager.onTransferEvent((message) => {
   if (message.type === 'download.failed') showToast(message.message)
   if (message.type === 'upload.completed') showToast(`${transfer.card.querySelector('.transfer-title').textContent} yüklendi.`)
   if (message.type === 'upload.failed') showToast(message.message)
+  if (activityDialog.open && !message.type.endsWith('.progress')) void renderActivity()
 })
 
 function statusLabel(transfer) {
-  const labels = {
+  const labels = desktopSettings.language === 'en' ? {
+    waiting: 'Queued', downloading: 'Downloading', uploading: 'Uploading', paused: 'Paused',
+    pausing: 'Pausing', retrying: `Retrying (${transfer.retryCount || 1}/3)`, completed: 'Completed',
+    cancelled: 'Cancelled', cancelling: 'Cancelling', failed: 'Failed', skipped: 'Skipped'
+  } : {
     waiting: 'Kuyrukta', downloading: 'İndiriliyor', uploading: 'Yükleniyor', paused: 'Duraklatıldı',
     pausing: 'Duraklatılıyor', retrying: `Yeniden deneniyor (${transfer.retryCount || 1}/3)`,
     completed: 'Tamamlandı', cancelled: 'İptal edildi', cancelling: 'İptal ediliyor',
@@ -327,9 +423,12 @@ function formatRemaining(seconds) {
   return `${Math.floor(seconds / 3600)} sa ${Math.ceil(seconds % 3600 / 60)} dk kaldı`
 }
 
-function setEngineStatus(state, label) {
+let engineStatusKey = 'engineWaiting'
+
+function setEngineStatus(state, labelKey) {
+  engineStatusKey = labelKey
   engineStatus.className = `engine-status ${state}`
-  engineStatus.querySelector('b').textContent = label
+  engineStatus.querySelector('b').textContent = t(labelKey)
 }
 
 function showFormError(message) {
@@ -351,7 +450,7 @@ function showToast(message) {
 }
 
 window.internetManager.engineStatus().then(({ ready, transfers: cachedTransfers, settings }) => {
-  if (ready) setEngineStatus('ready', 'Motor hazır')
+  if (ready) setEngineStatus('ready', 'engineReady')
   for (const record of cachedTransfers) ensureTransfer(record)
   if (settings) {
     document.querySelector('#max-concurrent').value = settings.maxConcurrent
@@ -414,6 +513,7 @@ async function refreshProfiles() {
     select.append(option)
   }
   renderProfileList()
+  updateUploadCapabilities()
 }
 
 async function showUploadDialog() {
@@ -434,6 +534,7 @@ document.querySelector('#choose-upload-files').addEventListener('click', async (
   uploadFiles = await window.internetManager.chooseUploadFiles()
   document.querySelector('#upload-files').value = uploadFiles.length ? `${uploadFiles.length} dosya seçildi` : ''
 })
+document.querySelector('#upload-profile').addEventListener('change', updateUploadCapabilities)
 document.querySelector('#manage-profiles').addEventListener('click', async () => {
   await refreshProfiles()
   profileDialog.showModal()
@@ -456,7 +557,7 @@ document.querySelector('#upload-form').addEventListener('submit', async (event) 
         sourcePath, remotePath,
         profileId: document.querySelector('#upload-profile').value,
         conflictPolicy: document.querySelector('#upload-conflict').value,
-        speedLimit: Math.max(Number(document.querySelector('#upload-speed-limit').value) || 0, 0) * 1024
+        speedLimit: Math.max(Number(document.querySelector('#upload-speed-limit').value) || 0, 0) * 1024 * 1024
       })
     }
     uploadFiles = []
@@ -477,18 +578,53 @@ window.addEventListener('drop', async (event) => {
 const providerSelect = document.querySelector('#profile-provider')
 providerSelect.addEventListener('change', () => {
   const isSftp = providerSelect.value === 'sftp'
+  const isWebDav = providerSelect.value === 'webdav'
+  const isS3 = providerSelect.value === 's3'
   document.querySelector('#sftp-fields').classList.toggle('hidden', !isSftp)
-  document.querySelector('#webdav-fields').classList.toggle('hidden', isSftp)
+  document.querySelector('#webdav-fields').classList.toggle('hidden', !isWebDav)
+  document.querySelector('#account-fields').classList.toggle('hidden', isS3)
+  document.querySelector('#s3-fields').classList.toggle('hidden', !isS3)
 })
 document.querySelectorAll('.close-profile-dialog').forEach((button) => button.addEventListener('click', () => profileDialog.close()))
+document.querySelector('#export-profiles').addEventListener('click', async () => {
+  try {
+    const count = await window.internetManager.exportProfiles()
+    if (count) showToast(`${count} profil gizli bilgiler olmadan dışa aktarıldı.`)
+  } catch (error) {
+    showToast(error.message || 'Profiller dışa aktarılamadı.')
+  }
+})
+document.querySelector('#import-profiles').addEventListener('click', async () => {
+  try {
+    const count = await window.internetManager.importProfiles()
+    if (count) {
+      await refreshProfiles()
+      showToast(`${count} profil içe aktarıldı. Kullanmadan önce gizli bilgileri tamamlayın.`)
+    }
+  } catch (error) {
+    showToast(error.message || 'Profiller içe aktarılamadı.')
+  }
+})
 
 document.querySelector('#profile-form').addEventListener('submit', async (event) => {
   event.preventDefault()
   const errorBox = document.querySelector('#profile-error')
   const provider = providerSelect.value
-  const connection = provider === 'sftp'
-    ? { host: document.querySelector('#profile-host').value.trim(), port: Number(document.querySelector('#profile-port').value), username: document.querySelector('#profile-username').value.trim(), password: document.querySelector('#profile-password').value }
-    : { url: document.querySelector('#profile-url').value.trim(), username: document.querySelector('#profile-username').value.trim(), password: document.querySelector('#profile-password').value }
+  let connection
+  if (provider === 'sftp') {
+    connection = { host: document.querySelector('#profile-host').value.trim(), port: Number(document.querySelector('#profile-port').value), username: document.querySelector('#profile-username').value.trim(), password: document.querySelector('#profile-password').value }
+  } else if (provider === 'webdav') {
+    connection = { url: document.querySelector('#profile-url').value.trim(), username: document.querySelector('#profile-username').value.trim(), password: document.querySelector('#profile-password').value }
+  } else {
+    connection = {
+      endpoint_url: document.querySelector('#profile-s3-endpoint').value.trim(),
+      region: document.querySelector('#profile-s3-region').value.trim(),
+      bucket: document.querySelector('#profile-s3-bucket').value.trim(),
+      access_key_id: document.querySelector('#profile-s3-key').value.trim(),
+      secret_access_key: document.querySelector('#profile-s3-secret').value,
+      session_token: document.querySelector('#profile-s3-token').value
+    }
+  }
   try {
     await window.internetManager.saveProfile({ id: editingProfileId, name: document.querySelector('#profile-name').value, provider, connection })
     editingProfileId = null
@@ -515,7 +651,10 @@ function renderProfileList() {
     kind.textContent = profile.provider.toUpperCase()
     row.append(name, kind)
     row.append(actionButton('Test', async () => {
-      try { await window.internetManager.testProfile(profile.id); showToast('Bağlantı başarılı.') }
+      try {
+        const capabilities = await window.internetManager.testProfile(profile.id)
+        showToast(`Bağlantı başarılı · ${capabilityText(capabilities)}`)
+      }
       catch (error) { showToast(error.message || 'Bağlantı kurulamadı.') }
     }))
     row.append(actionButton('Düzenle', () => editProfile(profile)))
@@ -534,7 +673,284 @@ function editProfile(profile) {
   if (profile.provider === 'sftp') {
     document.querySelector('#profile-host').value = profile.connection.host || ''
     document.querySelector('#profile-port').value = profile.connection.port || 22
-  } else {
+  } else if (profile.provider === 'webdav') {
     document.querySelector('#profile-url').value = profile.connection.url || ''
+  } else {
+    document.querySelector('#profile-s3-endpoint').value = profile.connection.endpoint_url || ''
+    document.querySelector('#profile-s3-region').value = profile.connection.region || ''
+    document.querySelector('#profile-s3-bucket').value = profile.connection.bucket || ''
+    document.querySelector('#profile-s3-key').value = profile.connection.access_key_id || ''
+    document.querySelector('#profile-s3-secret').value = ''
+    document.querySelector('#profile-s3-token').value = ''
   }
 }
+
+function updateUploadCapabilities() {
+  const profile = profiles.find((item) => item.id === document.querySelector('#upload-profile').value)
+  const note = document.querySelector('#upload-capabilities')
+  if (!profile) {
+    note.textContent = 'Önce bir bağlantı profili oluştur.'
+    return
+  }
+  const capabilities = profile.provider === 's3'
+    ? { resume: true, browse: true, share_url: true }
+    : { resume: false, browse: true, share_url: profile.provider === 'webdav' }
+  note.textContent = `${profile.provider.toUpperCase()} · ${capabilityText(capabilities)}`
+}
+
+function capabilityText(capabilities) {
+  const parts = [capabilities?.browse ? 'klasör gezme' : null, capabilities?.resume ? 'devam ettirme' : 'baştan yeniden deneme', capabilities?.share_url ? 'nesne adresi' : null]
+  return parts.filter(Boolean).join(' · ')
+}
+
+document.querySelector('#browse-remote').addEventListener('click', async () => {
+  if (!document.querySelector('#upload-profile').value) {
+    document.querySelector('#upload-error').textContent = 'Önce bir bağlantı profili seçin.'
+    document.querySelector('#upload-error').classList.remove('hidden')
+    return
+  }
+  remoteBrowserPath = document.querySelector('#remote-path').value.trim() || '/'
+  remoteDialog.showModal()
+  await loadRemotePath(remoteBrowserPath)
+})
+
+async function loadRemotePath(path) {
+  const list = document.querySelector('#remote-list')
+  const error = document.querySelector('#remote-error')
+  list.innerHTML = '<p class="remote-empty">Klasörler getiriliyor…</p>'
+  error.classList.add('hidden')
+  try {
+    const result = await window.internetManager.listRemote(document.querySelector('#upload-profile').value, path)
+    remoteBrowserPath = result.path || path || '/'
+    document.querySelector('#remote-current-path').textContent = remoteBrowserPath || '/'
+    list.replaceChildren()
+    if (!result.entries.length) list.innerHTML = '<p class="remote-empty">Bu hedef boş.</p>'
+    for (const entry of result.entries) {
+      const row = document.createElement(entry.type === 'folder' ? 'button' : 'div')
+      if (entry.type === 'folder') row.type = 'button'
+      row.className = `remote-entry ${entry.type}`
+      row.innerHTML = '<span aria-hidden="true"></span><b></b><small></small>'
+      row.querySelector('span').textContent = entry.type === 'folder' ? '▰' : '•'
+      row.querySelector('b').textContent = entry.name
+      row.querySelector('small').textContent = entry.type === 'folder' ? 'klasör →' : formatBytes(entry.size)
+      if (entry.type === 'folder') row.addEventListener('click', () => loadRemotePath(entry.path))
+      list.append(row)
+    }
+  } catch (cause) {
+    error.textContent = cause.message || 'Uzak klasörler getirilemedi.'
+    error.classList.remove('hidden')
+    list.replaceChildren()
+  }
+}
+
+document.querySelector('#remote-up').addEventListener('click', () => {
+  const parent = remoteBrowserPath.replace(/\/$/, '').split('/').slice(0, -1).join('/') || '/'
+  void loadRemotePath(parent)
+})
+document.querySelector('#select-remote').addEventListener('click', () => {
+  document.querySelector('#remote-path').value = remoteBrowserPath || '/'
+  remoteDialog.close()
+})
+document.querySelector('#close-remote-dialog').addEventListener('click', () => remoteDialog.close())
+document.querySelector('#cancel-remote').addEventListener('click', () => remoteDialog.close())
+
+document.querySelectorAll('[data-filter]').forEach((button) => {
+  button.addEventListener('click', () => {
+    currentTransferFilter = button.dataset.filter
+    document.querySelectorAll('[data-filter]').forEach((item) => item.classList.toggle('active', item === button))
+    for (const transfer of transfers.values()) renderTransfer(transfer)
+  })
+})
+
+function applyTheme(theme) {
+  const resolved = theme === 'system'
+    ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+    : theme
+  document.documentElement.dataset.theme = resolved
+}
+
+function applyLanguage() {
+  document.documentElement.lang = desktopSettings.language
+  for (const element of document.querySelectorAll('[data-i18n]')) {
+    element.textContent = t(element.dataset.i18n)
+  }
+  for (const element of document.querySelectorAll('[data-i18n-placeholder]')) {
+    element.placeholder = t(element.dataset.i18nPlaceholder)
+  }
+  for (const element of document.querySelectorAll('[data-i18n-aria]')) {
+    element.setAttribute('aria-label', t(element.dataset.i18nAria))
+  }
+  engineStatus.querySelector('b').textContent = t(engineStatusKey)
+  for (const transfer of transfers.values()) renderTransfer(transfer)
+}
+
+function fillSettingsForm() {
+  document.querySelector('#setting-close-to-tray').checked = desktopSettings.closeToTray
+  document.querySelector('#setting-notifications').checked = desktopSettings.notifications
+  document.querySelector('#setting-launch-at-startup').checked = desktopSettings.launchAtStartup
+  document.querySelector('#setting-theme').value = desktopSettings.theme
+  document.querySelector('#setting-language').value = desktopSettings.language
+}
+
+function showSettingsDialog() {
+  fillSettingsForm()
+  if (!settingsDialog.open) settingsDialog.showModal()
+}
+
+document.querySelector('#settings-button').addEventListener('click', showSettingsDialog)
+document.querySelectorAll('.close-settings-dialog').forEach((button) => button.addEventListener('click', () => settingsDialog.close()))
+document.querySelector('#settings-form').addEventListener('submit', async (event) => {
+  event.preventDefault()
+  try {
+    desktopSettings = await window.internetManager.updateDesktopSettings({
+      closeToTray: document.querySelector('#setting-close-to-tray').checked,
+      notifications: document.querySelector('#setting-notifications').checked,
+      launchAtStartup: document.querySelector('#setting-launch-at-startup').checked,
+      theme: document.querySelector('#setting-theme').value,
+      language: document.querySelector('#setting-language').value
+    })
+    applyTheme(desktopSettings.theme)
+    applyLanguage()
+    settingsDialog.close()
+    showToast(desktopSettings.language === 'en' ? 'Desktop settings saved.' : 'Masaüstü ayarları kaydedildi.')
+  } catch (error) {
+    showToast(error.message || 'Ayarlar kaydedilemedi.')
+  }
+})
+
+async function showActivityDialog() {
+  if (!activityDialog.open) activityDialog.showModal()
+  await renderActivity()
+}
+
+async function renderActivity() {
+  const list = document.querySelector('#activity-list')
+  const filter = document.querySelector('#activity-filter').value
+  const entries = await window.internetManager.listActivity()
+  const visible = entries.filter((entry) => {
+    if (filter === 'all') return true
+    if (filter === 'error') return entry.type.endsWith('.failed') || entry.type === 'engine.error'
+    return entry.direction === filter
+  })
+  list.replaceChildren()
+  if (!visible.length) {
+    const empty = document.createElement('p')
+    empty.className = 'remote-empty activity-empty'
+    empty.textContent = desktopSettings.language === 'en' ? 'No activity matches this filter.' : 'Bu filtreye uyan aktivite yok.'
+    list.append(empty)
+    return
+  }
+  for (const entry of visible) {
+    const row = document.createElement('article')
+    row.className = `activity-entry ${entry.direction}`
+    const mark = document.createElement('span')
+    mark.className = 'activity-mark'
+    mark.textContent = entry.direction === 'upload' ? '↑' : '↓'
+    const copy = document.createElement('div')
+    const title = document.createElement('b')
+    title.textContent = entry.title || 'Internet Manager'
+    const description = document.createElement('p')
+    description.textContent = activityLabel(entry)
+    copy.append(title, description)
+    const time = document.createElement('time')
+    time.dateTime = entry.createdAt
+    time.textContent = new Intl.DateTimeFormat(desktopSettings.language, { dateStyle: 'short', timeStyle: 'short' }).format(new Date(entry.createdAt))
+    row.append(mark, copy, time)
+    list.append(row)
+  }
+}
+
+function activityLabel(entry) {
+  if (entry.message) return entry.message
+  const english = desktopSettings.language === 'en'
+  const labels = english ? {
+    'download.created': 'Download added', 'download.paused': 'Download paused', 'download.completed': 'Download completed',
+    'download.cancelled': 'Download cancelled', 'upload.created': 'Upload added', 'upload.paused': 'Upload paused',
+    'upload.completed': 'Upload completed', 'upload.cancelled': 'Upload cancelled', 'upload.skipped': 'Upload skipped'
+  } : {
+    'download.created': 'İndirme eklendi', 'download.paused': 'İndirme duraklatıldı', 'download.completed': 'İndirme tamamlandı',
+    'download.cancelled': 'İndirme iptal edildi', 'upload.created': 'Yükleme eklendi', 'upload.paused': 'Yükleme duraklatıldı',
+    'upload.completed': 'Yükleme tamamlandı', 'upload.cancelled': 'Yükleme iptal edildi', 'upload.skipped': 'Yükleme atlandı'
+  }
+  return labels[entry.type] || entry.type
+}
+
+document.querySelector('#activity-button').addEventListener('click', () => void showActivityDialog())
+document.querySelector('.close-activity-dialog').addEventListener('click', () => activityDialog.close())
+document.querySelector('#activity-filter').addEventListener('change', () => void renderActivity())
+document.querySelector('#clear-activity').addEventListener('click', async () => {
+  await window.internetManager.clearActivity()
+  await renderActivity()
+})
+
+function showTransferDetails(transfer) {
+  detailsTransferId = transfer.transferId
+  const visiblePath = transfer.direction === 'upload' ? transfer.sourcePath : transfer.destination
+  document.querySelector('#details-title').textContent = visiblePath?.split(/[\\/]/).pop() || transfer.url || 'Transfer'
+  const values = [
+    [desktopSettings.language === 'en' ? 'Status' : 'Durum', statusLabel(transfer)],
+    [desktopSettings.language === 'en' ? 'Direction' : 'Yön', transfer.direction === 'upload' ? t('uploads') : t('downloads')],
+    [desktopSettings.language === 'en' ? 'Progress' : 'İlerleme', `${formatBytes(transfer.downloadedBytes)} / ${formatBytes(transfer.totalBytes)}`],
+    [desktopSettings.language === 'en' ? 'Local path' : 'Yerel yol', visiblePath || '—'],
+    [desktopSettings.language === 'en' ? 'Remote path' : 'Uzak yol', transfer.remotePath || transfer.url || '—'],
+    ['Provider', transfer.provider?.toUpperCase() || 'HTTP'],
+    [desktopSettings.language === 'en' ? 'Created' : 'Oluşturuldu', transfer.createdAt ? new Date(transfer.createdAt).toLocaleString(desktopSettings.language) : '—']
+  ]
+  const grid = document.querySelector('#details-grid')
+  grid.replaceChildren()
+  for (const [label, value] of values) {
+    const term = document.createElement('dt')
+    const description = document.createElement('dd')
+    term.textContent = label
+    description.textContent = value
+    grid.append(term, description)
+  }
+  const error = document.querySelector('#details-error')
+  error.textContent = transfer.error || ''
+  error.classList.toggle('hidden', !transfer.error)
+  document.querySelector('#open-transfer-file').disabled = transfer.direction !== 'upload' && transfer.status !== 'completed'
+  detailsDialog.showModal()
+}
+
+document.querySelector('.close-details-dialog').addEventListener('click', () => detailsDialog.close())
+document.querySelector('#open-transfer-folder').addEventListener('click', async () => {
+  try { await window.internetManager.openTransfer(detailsTransferId, 'folder') }
+  catch (error) { showToast(error.message || 'Klasör açılamadı.') }
+})
+document.querySelector('#open-transfer-file').addEventListener('click', async () => {
+  try { await window.internetManager.openTransfer(detailsTransferId, 'file') }
+  catch (error) { showToast(error.message || 'Dosya açılamadı.') }
+})
+
+document.addEventListener('keydown', (event) => {
+  if (!event.ctrlKey || event.altKey) return
+  if (event.key.toLowerCase() === 'n' && event.shiftKey) {
+    event.preventDefault()
+    void showUploadDialog()
+  } else if (event.key.toLowerCase() === 'n') {
+    event.preventDefault()
+    showDialog()
+  } else if (event.key === ',') {
+    event.preventDefault()
+    showSettingsDialog()
+  } else if (event.key.toLowerCase() === 'l') {
+    event.preventDefault()
+    void showActivityDialog()
+  }
+})
+
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+  if (desktopSettings.theme === 'system') applyTheme('system')
+})
+
+window.internetManager.onDesktopSettingsChanged((settings) => {
+  desktopSettings = settings
+  applyTheme(settings.theme)
+  applyLanguage()
+})
+
+window.internetManager.getDesktopSettings().then((settings) => {
+  desktopSettings = settings
+  applyTheme(settings.theme)
+  applyLanguage()
+})

@@ -13,12 +13,22 @@ contextBridge.exposeInMainWorld('internetManager', {
   chooseUploadFiles: () => ipcRenderer.invoke('upload:choose-files'),
   droppedFilePath: (file) => webUtils.getPathForFile(file),
   startUpload: (input) => ipcRenderer.invoke('upload:start', input),
+  pauseUpload: (transferId) => ipcRenderer.invoke('upload:pause', transferId),
   cancelUpload: (transferId) => ipcRenderer.invoke('upload:cancel', transferId),
   retryUpload: (transferId) => ipcRenderer.invoke('upload:retry', transferId),
   listProfiles: () => ipcRenderer.invoke('profiles:list'),
   saveProfile: (profile) => ipcRenderer.invoke('profiles:save', profile),
   deleteProfile: (profileId) => ipcRenderer.invoke('profiles:delete', profileId),
+  exportProfiles: () => ipcRenderer.invoke('profiles:export'),
+  importProfiles: () => ipcRenderer.invoke('profiles:import'),
   testProfile: (profileId) => ipcRenderer.invoke('profiles:test', profileId),
+  listRemote: (profileId, path) => ipcRenderer.invoke('provider:list', profileId, path),
+  copyText: (value) => ipcRenderer.invoke('clipboard:write', value),
+  getDesktopSettings: () => ipcRenderer.invoke('desktop-settings:get'),
+  updateDesktopSettings: (settings) => ipcRenderer.invoke('desktop-settings:update', settings),
+  listActivity: () => ipcRenderer.invoke('activity:list'),
+  clearActivity: () => ipcRenderer.invoke('activity:clear'),
+  openTransfer: (transferId, mode) => ipcRenderer.invoke('transfer:open', transferId, mode),
   scanUrl: (url) => ipcRenderer.invoke('capture:scan', url),
   closeCapture: () => ipcRenderer.invoke('capture:close'),
   onClipboardUrl: (callback) => {
@@ -31,5 +41,10 @@ contextBridge.exposeInMainWorld('internetManager', {
     const listener = (_event, message) => callback(message)
     ipcRenderer.on('transfer:event', listener)
     return () => ipcRenderer.removeListener('transfer:event', listener)
+  },
+  onDesktopSettingsChanged: (callback) => {
+    const listener = (_event, settings) => callback(settings)
+    ipcRenderer.on('desktop-settings:changed', listener)
+    return () => ipcRenderer.removeListener('desktop-settings:changed', listener)
   }
 })

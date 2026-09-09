@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
@@ -50,6 +51,14 @@ class TransferStore:
             CREATE TABLE IF NOT EXISTS settings (
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS upload_sessions (
+                transfer_id TEXT PRIMARY KEY,
+                provider TEXT NOT NULL,
+                remote_path TEXT NOT NULL,
+                state_json TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(transfer_id) REFERENCES transfers(id) ON DELETE CASCADE
             );
         """)
         columns = {
@@ -148,7 +157,7 @@ class TransferStore:
             """
             UPDATE transfers
             SET status = 'paused', error = NULL, updated_at = ?
-            WHERE status IN ('waiting', 'downloading', 'retrying')
+            WHERE status IN ('waiting', 'downloading', 'uploading', 'retrying')
             """,
             (now_iso(),),
         )
@@ -170,6 +179,35 @@ class TransferStore:
             ON CONFLICT(key) DO UPDATE SET value = excluded.value
             """,
             (key, value),
+        )
+        self.connection.commit()
+
+    def get_upload_session(self, transfer_id: str) -> dict[str, Any] | None:
+        row = self.connection.execute(
+            "SELECT state_json FROM upload_sessions WHERE transfer_id = ?", (transfer_id,)
+        ).fetchone()
+        return json.loads(row["state_json"]) if row else None
+
+    def save_upload_session(
+        self, transfer_id: str, provider: str, remote_path: str, state: dict[str, Any]
+    ) -> None:
+        self.connection.execute(
+            """
+            INSERT INTO upload_sessions (transfer_id, provider, remote_path, state_json, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(transfer_id) DO UPDATE SET
+                provider = excluded.provider,
+                remote_path = excluded.remote_path,
+                state_json = excluded.state_json,
+                updated_at = excluded.updated_at
+            """,
+            (transfer_id, provider, remote_path, json.dumps(state), now_iso()),
+        )
+        self.connection.commit()
+
+    def clear_upload_session(self, transfer_id: str) -> None:
+        self.connection.execute(
+            "DELETE FROM upload_sessions WHERE transfer_id = ?", (transfer_id,)
         )
         self.connection.commit()
 

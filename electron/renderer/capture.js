@@ -7,6 +7,16 @@ const itemsContainer = document.querySelector('#items')
 const downloadButton = document.querySelector('#download')
 let items = []
 
+function applyCaptureTheme(settings) {
+  const theme = settings.theme === 'system'
+    ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+    : settings.theme
+  document.documentElement.dataset.theme = theme
+}
+
+window.internetManager.getDesktopSettings().then(applyCaptureTheme)
+window.internetManager.onDesktopSettingsChanged(applyCaptureTheme)
+
 document.querySelector('#close').addEventListener('click', () => window.internetManager.closeCapture())
 window.internetManager.onClipboardUrl((url) => {
   urlInput.value = /^https?:\/\//i.test(url) ? url : ''
@@ -16,17 +26,24 @@ scanButton.addEventListener('click', scan)
 urlInput.addEventListener('keydown', (event) => { if (event.key === 'Enter') void scan() })
 
 async function scan() {
+  const url = urlInput.value.trim()
+  if (!/^https?:\/\//i.test(url)) {
+    message.textContent = 'Geçerli bir HTTP/HTTPS bağlantısı gir.'
+    message.hidden = false
+    results.hidden = true
+    return
+  }
   scanning.hidden = false
   message.hidden = true
   results.hidden = true
   scanButton.disabled = true
   try {
-    const response = await window.internetManager.scanUrl(urlInput.value.trim())
+    const response = await window.internetManager.scanUrl(url)
     items = Array.isArray(response?.items) ? response.items : []
     renderItems()
     results.hidden = false
-    message.hidden = items.length > 0
-    message.textContent = items.length ? '' : 'Bu sayfada indirilebilir açık bir dosya bulunamadı.'
+    message.hidden = items.length > 0 && !response?.error
+    message.textContent = response?.error || (items.length ? '' : 'Bu sayfada indirilebilir açık bir dosya bulunamadı.')
   } catch (error) {
     message.textContent = error.message || 'Bağlantı taranamadı.'
     message.hidden = false

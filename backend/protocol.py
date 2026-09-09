@@ -40,7 +40,7 @@ class UploadPayload(StrictMessage):
     transfer_id: str = Field(min_length=1, max_length=128)
     source_path: str = Field(min_length=1)
     remote_path: str = Field(min_length=1)
-    provider: Literal["sftp", "webdav"]
+    provider: Literal["sftp", "webdav", "s3"]
     profile_id: str = Field(min_length=1)
     connection: dict
     conflict_policy: Literal["overwrite", "rename", "skip"] = "overwrite"
@@ -53,8 +53,12 @@ class UploadRetryPayload(TransferPayload):
 
 
 class ProfileTestPayload(StrictMessage):
-    provider: Literal["sftp", "webdav"]
+    provider: Literal["sftp", "webdav", "s3"]
     connection: dict
+
+
+class ProviderListPayload(ProfileTestPayload):
+    path: str = ""
 
 
 class ScanPayload(StrictMessage):
@@ -73,9 +77,11 @@ class Command(StrictMessage):
         "transfers.bulk",
         "settings.update",
         "upload.start",
+        "upload.pause",
         "upload.cancel",
         "upload.retry",
         "profile.test",
+        "provider.list",
         "scan.start",
         "transfers.list",
         "engine.shutdown",
