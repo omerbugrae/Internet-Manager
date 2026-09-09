@@ -2,7 +2,7 @@
 
 Electron arayüzü ve Python transfer motoruyla geliştirilen ücretsiz indirme/yükleme yöneticisi.
 
-## v0.6'yı çalıştırma
+## v0.8'i çalıştırma
 
 Python ortamını etkinleştirin:
 
@@ -26,7 +26,7 @@ npm run check
 python -m compileall -q backend
 ```
 
-## v0.6 kapsamı
+## v0.8 kapsamı
 
 - HTTP/HTTPS dosyası indirme
 - Windows kayıt konumu seçici
@@ -73,6 +73,16 @@ python -m compileall -q backend
 - Transfer ayrıntıları ile yerel dosyayı veya klasörü açma
 - Kalıcı, filtrelenebilir aktivite ve hata günlüğü
 - Yeni indirme, yeni yükleme, ayarlar ve aktivite için klavye kısayolları
+- Toplu bağlantı ekleme: çoklu URL yapıştırma, `.txt`/`.csv` içe aktarma, tarama önizlemesi ve zaten kuyrukta olanları algılama
+- Bağlantıları veya dosyaları pencereye sürükleyip bırakarak hızlı ekleme
+- Komut satırından veya `internet-manager://` özel protokolünden bağlantı/dosya yolu ekleme
+- İsteğe bağlı pano bağlantısı algılama ve kuyruğa ekleme önerisi
+- İndirme/yükleme için kaydedilebilir görev şablonları
+- Görev zamanlama: belirli tarih/saatte başlatma, günlük/haftalık tekrar
+- Saat aralığına göre otomatik hız limiti
+- Kaçırılmış zamanlanmış görevler için "hemen başlat" veya "atla" tercihi
+- Bağlantı kesilince transferleri duraklatıp bağlantı gelince otomatik sürdürme
+- Tüm transferler bitince uygulamayı kapatma, bilgisayarı uyutma veya kapatma (30 saniyelik iptal edilebilir geri sayımla)
 
 Hızlı yakalamayı kullanmak için bağlantıyı tarayıcıda kopyalayın ve uygulama çalışırken `Ctrl+Alt+D` tuşlarına basın. Tarama yalnızca herkese açık HTTP/HTTPS içeriklerini ve sayfanın statik HTML bağlantılarını görür; tarayıcı oturumuna, giriş yapılmış sayfalara, JavaScript ile sonradan üretilen bağlantılara veya DRM içeriğine erişmez.
 

@@ -13,7 +13,7 @@
       <header class="titlebar">
         <div class="logo" aria-hidden="true"><span></span></div>
         <div class="brand-lockup"><strong>Internet Manager</strong><span>TRANSFER DESK</span></div>
-        <span class="version">v0.6</span>
+        <span class="version">v0.8</span>
       </header>
 
       <aside class="sidebar">
@@ -24,6 +24,10 @@
         <button class="new-upload" id="new-upload-button" type="button">
           <svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>
           <span data-i18n="newUpload">Yeni yükleme</span>
+        </button>
+        <button class="nav-item" id="bulk-add-button" type="button">
+          <svg class="ic" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 12H3"/><path d="M16 6H3"/><path d="M11 18H3"/><path d="M18 9v6"/><path d="M21 12h-6"/></svg>
+          <span data-i18n="bulkAdd">Toplu ekle</span>
         </button>
         <nav data-i18n-aria="transferFilters" aria-label="Transfer filtreleri">
           <button class="nav-item active" data-filter="all" type="button">
@@ -43,6 +47,10 @@
           <button class="nav-item" id="activity-button" type="button">
             <svg class="ic" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
             <span data-i18n="activity">Aktivite</span><small>Ctrl L</small>
+          </button>
+          <button class="nav-item" id="automation-button" type="button">
+            <svg class="ic" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+            <span data-i18n="automation">Otomasyon</span>
           </button>
           <button class="nav-item" id="settings-button" type="button">
             <svg class="ic" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>
@@ -97,6 +105,12 @@
           <button class="icon-button close-dialog" data-i18n-aria="closeWindow" aria-label="Pencereyi kapat" type="button"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg></button>
         </div>
         <h2 data-i18n="downloadHeading">Bağlantıyı nereye indirelim?</h2>
+        <label for="download-template" data-i18n="template">Şablon</label>
+        <div class="path-picker"><select id="download-template"></select><button id="delete-download-template" type="button" data-i18n="deleteTemplate">Sil</button></div>
+        <div class="template-save-row">
+          <input id="download-template-name" type="text" data-i18n-placeholder="templateName" placeholder="Şablon adı" />
+          <button id="save-download-template" type="button" data-i18n="saveAsTemplate">Şablon olarak kaydet</button>
+        </div>
         <label for="download-url" data-i18n="fileLink">Dosya bağlantısı</label>
         <input id="download-url" name="url" type="url" required placeholder="https://example.com/dosya.zip" autocomplete="off" />
         <label for="download-destination" data-i18n="saveLocation">Kayıt konumu</label>
@@ -112,6 +126,21 @@
         </select>
         <label for="task-speed-limit" data-i18n="taskSpeedLimit">Bu indirme için hız limiti</label>
         <div class="unit-input"><input id="task-speed-limit" type="number" min="0" step="0.1" value="0" /><span data-i18n="unitMbps">MB/sn</span></div>
+        <div class="field-pair">
+          <div>
+            <label for="download-schedule" data-i18n="startAt">Başlangıç zamanı</label>
+            <input id="download-schedule" type="datetime-local" />
+          </div>
+          <div>
+            <label for="download-repeat" data-i18n="repeat">Tekrar</label>
+            <select id="download-repeat">
+              <option value="none" data-i18n="repeatNone">Tekrarlama</option>
+              <option value="daily" data-i18n="repeatDaily">Her gün</option>
+              <option value="weekly" data-i18n="repeatWeekly">Her hafta</option>
+            </select>
+          </div>
+        </div>
+        <p class="capability-note" data-i18n="scheduleHint">Boş bırakılırsa transfer hemen kuyruğa alınır.</p>
         <p class="form-error hidden" id="form-error" role="alert"></p>
         <div class="dialog-actions">
           <button class="text-button close-dialog" type="button" data-i18n="discard">Vazgeç</button>
@@ -124,6 +153,12 @@
       <form id="upload-form" novalidate>
         <div class="dialog-heading"><p class="eyebrow" data-i18n="newUploadEyebrow">YENİ YÜKLEME</p><button class="icon-button close-upload-dialog" data-i18n-aria="closeWindow" aria-label="Pencereyi kapat" type="button"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg></button></div>
         <h2 data-i18n="uploadHeading">Dosyaları hedefe gönder.</h2>
+        <label for="upload-template" data-i18n="template">Şablon</label>
+        <div class="path-picker"><select id="upload-template"></select><button id="delete-upload-template" type="button" data-i18n="deleteTemplate">Sil</button></div>
+        <div class="template-save-row">
+          <input id="upload-template-name" type="text" data-i18n-placeholder="templateName" placeholder="Şablon adı" />
+          <button id="save-upload-template" type="button" data-i18n="saveAsTemplate">Şablon olarak kaydet</button>
+        </div>
         <label data-i18n="localFiles">Yerel dosyalar</label>
         <div class="path-picker"><input id="upload-files" readonly data-i18n-placeholder="noFileChosen" placeholder="Dosya seçilmedi" /><button id="choose-upload-files" type="button" data-i18n="choose">Seç</button></div>
         <label for="upload-profile" data-i18n="connectionProfile">Bağlantı profili</label>
@@ -135,8 +170,73 @@
         <select id="upload-conflict"><option value="overwrite" data-i18n="overwrite">Üzerine yaz</option><option value="rename" data-i18n="renameNew">Yeni bir ad oluştur</option><option value="skip" data-i18n="skip">Atla</option></select>
         <label for="upload-speed-limit" data-i18n="uploadSpeedLimit">Yükleme hız limiti</label>
         <div class="unit-input"><input id="upload-speed-limit" type="number" min="0" step="0.1" value="0" /><span data-i18n="unitMbps">MB/sn</span></div>
+        <div class="field-pair">
+          <div>
+            <label for="upload-schedule" data-i18n="startAt">Başlangıç zamanı</label>
+            <input id="upload-schedule" type="datetime-local" />
+          </div>
+          <div>
+            <label for="upload-repeat" data-i18n="repeat">Tekrar</label>
+            <select id="upload-repeat">
+              <option value="none" data-i18n="repeatNone">Tekrarlama</option>
+              <option value="daily" data-i18n="repeatDaily">Her gün</option>
+              <option value="weekly" data-i18n="repeatWeekly">Her hafta</option>
+            </select>
+          </div>
+        </div>
+        <p class="capability-note" data-i18n="scheduleHint">Boş bırakılırsa transfer hemen kuyruğa alınır.</p>
         <p class="form-error hidden" id="upload-error" role="alert"></p>
         <div class="dialog-actions"><button class="text-button close-upload-dialog" type="button" data-i18n="discard">Vazgeç</button><button class="upload-action" type="submit" data-i18n="startUpload">Yüklemeyi başlat</button></div>
+      </form>
+    </dialog>
+
+    <dialog id="bulk-dialog" class="wide-dialog">
+      <form id="bulk-form" novalidate>
+        <div class="dialog-heading">
+          <p class="eyebrow" data-i18n="bulkAddEyebrow">TOPLU EKLE</p>
+          <button class="icon-button close-bulk-dialog" data-i18n-aria="closeWindow" aria-label="Pencereyi kapat" type="button"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg></button>
+        </div>
+        <h2 data-i18n="bulkHeading">Çok sayıda bağlantıyı birlikte ekle.</h2>
+        <label for="bulk-urls" data-i18n="bulkUrlsLabel">Bağlantılar (her satıra bir tane)</label>
+        <textarea id="bulk-urls" rows="5" placeholder="https://example.com/dosya1.zip&#10;https://example.com/dosya2.zip"></textarea>
+        <div class="bulk-toolbar">
+          <button id="bulk-import-file" type="button" data-i18n="importFromFile">.txt / .csv içe aktar</button>
+          <span id="bulk-import-summary" class="capability-note"></span>
+        </div>
+        <div class="field-pair">
+          <div>
+            <label for="bulk-conflict" data-i18n="ifSameName">Aynı isimde dosya varsa</label>
+            <select id="bulk-conflict">
+              <option value="overwrite" data-i18n="overwrite">Üzerine yaz</option>
+              <option value="rename" data-i18n="renameNew">Yeni bir ad oluştur</option>
+              <option value="skip" data-i18n="skipThis">Bu indirmeyi atla</option>
+            </select>
+          </div>
+          <div>
+            <label for="bulk-speed-limit" data-i18n="taskSpeedLimit">Bu indirme için hız limiti</label>
+            <div class="unit-input"><input id="bulk-speed-limit" type="number" min="0" step="0.1" value="0" /><span data-i18n="unitMbps">MB/sn</span></div>
+          </div>
+        </div>
+        <label for="bulk-destination" data-i18n="saveLocation">Kayıt konumu</label>
+        <div class="path-picker">
+          <input id="bulk-destination" type="text" readonly data-i18n-placeholder="noLocationChosen" placeholder="Henüz bir konum seçilmedi" />
+          <button id="choose-bulk-destination" type="button" data-i18n="choose">Seç</button>
+        </div>
+        <p class="form-error hidden" id="bulk-error" role="alert"></p>
+        <div class="dialog-actions">
+          <button class="text-button" id="bulk-scan-button" type="button" data-i18n="scanLinks">Bağlantıları tara</button>
+        </div>
+        <div id="bulk-results" class="bulk-results hidden">
+          <div class="result-heading">
+            <b id="bulk-result-summary">0 öğe</b>
+            <button id="bulk-toggle-all" type="button" data-i18n="selectAll">Tümünü seç</button>
+          </div>
+          <div class="bulk-list" id="bulk-list"></div>
+        </div>
+        <div class="dialog-actions">
+          <button class="text-button close-bulk-dialog" type="button" data-i18n="discard">Vazgeç</button>
+          <button class="primary-action" id="bulk-start-button" type="button" disabled data-i18n="startSelectedDownloads">Seçilenleri indir</button>
+        </div>
       </form>
     </dialog>
 
@@ -181,11 +281,53 @@
         <div class="setting-row"><div><b data-i18n="closeToTray">Kapatınca arka planda çalış</b><small data-i18n="closeToTrayHelp">Pencere kapanır, transferler sistem tepsisinde sürer.</small></div><input id="setting-close-to-tray" type="checkbox" /></div>
         <div class="setting-row"><div><b data-i18n="notifications">Bildirimler</b><small data-i18n="notificationsHelp">Tamamlanan ve başarısız transferleri bildir.</small></div><input id="setting-notifications" type="checkbox" /></div>
         <div class="setting-row"><div><b data-i18n="launchAtStartup">Windows ile başlat</b><small data-i18n="launchAtStartupHelp">Oturum açıldığında Internet Manager hazır olsun.</small></div><input id="setting-launch-at-startup" type="checkbox" /></div>
+        <div class="setting-row"><div><b data-i18n="clipboardSuggest">Pano bağlantısını algıla</b><small data-i18n="clipboardSuggestHelp">Pencereye her dönüşte panoda bağlantı varsa kuyruğa eklemeyi öner.</small></div><input id="setting-clipboard-suggest" type="checkbox" /></div>
         <div class="setting-grid"><label for="setting-theme" data-i18n="theme">Tema</label><select id="setting-theme"><option value="system" data-i18n="themeSystem">Sistem</option><option value="light" data-i18n="themeLight">Açık</option><option value="dark" data-i18n="themeDark">Koyu</option></select><label for="setting-language" data-i18n="language">Dil</label><select id="setting-language"><option value="tr">Türkçe</option><option value="en">English</option></select></div>
         <div class="shortcut-sheet"><b data-i18n="shortcuts">Kısayollar</b><span><kbd>Ctrl N</kbd> <i data-i18n="newDownload">Yeni indirme</i></span><span><kbd>Ctrl Shift N</kbd> <i data-i18n="newUpload">Yeni yükleme</i></span><span><kbd>Ctrl Alt D</kbd> <i data-i18n="smartCapture">Akıllı yakalama</i></span></div>
         <div class="dialog-actions"><button class="text-button close-settings-dialog" type="button" data-i18n="cancel">Vazgeç</button><button class="primary-action" type="submit" data-i18n="saveSettings">Ayarları kaydet</button></div>
       </form>
     </dialog>
+
+    <dialog id="automation-dialog">
+      <form id="automation-form">
+        <div class="dialog-heading"><p class="eyebrow" data-i18n="automationEyebrow">OTOMASYON</p><button class="icon-button close-automation-dialog" data-i18n-aria="closeWindow" aria-label="Pencereyi kapat" type="button"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg></button></div>
+        <h2 data-i18n="automationTitle">Hat kendi kendini yönetsin.</h2>
+
+        <label data-i18n="speedWindows">Saat aralığına göre hız limiti</label>
+        <div class="speed-window-list" id="speed-window-list"></div>
+        <div class="bulk-toolbar">
+          <button id="add-speed-window" type="button" data-i18n="addWindow">Aralık ekle</button>
+          <span class="capability-note" data-i18n="speedWindowHint">Aralık dışındaki saatlerde genel limit geçerlidir.</span>
+        </div>
+
+        <label for="missed-policy" data-i18n="missedPolicy">Kaçırılmış zamanlanmış görevler</label>
+        <select id="missed-policy">
+          <option value="run" data-i18n="missedRun">Uygulama açılınca hemen başlat</option>
+          <option value="skip" data-i18n="missedSkip">Atla ve sıradaki tekrarı bekle</option>
+        </select>
+
+        <label for="completion-action" data-i18n="completionAction">Tüm transferler bitince</label>
+        <select id="completion-action">
+          <option value="none" data-i18n="completionNone">Hiçbir şey yapma</option>
+          <option value="quit" data-i18n="completionQuit">Uygulamayı kapat</option>
+          <option value="sleep" data-i18n="completionSleep">Bilgisayarı uyut</option>
+          <option value="shutdown" data-i18n="completionShutdown">Bilgisayarı kapat</option>
+        </select>
+        <p class="capability-note" data-i18n="completionHint">Eylemden önce 30 saniyelik geri sayım gösterilir, istediğin an iptal edebilirsin.</p>
+
+        <p class="form-error hidden" id="automation-error" role="alert"></p>
+        <div class="dialog-actions"><button class="text-button close-automation-dialog" type="button" data-i18n="cancel">Vazgeç</button><button class="primary-action" type="submit" data-i18n="saveSettings">Ayarları kaydet</button></div>
+      </form>
+    </dialog>
+
+    <div class="countdown-overlay hidden" id="countdown-overlay" role="alertdialog" aria-modal="true">
+      <div class="countdown-card">
+        <p class="eyebrow" data-i18n="automationEyebrow">OTOMASYON</p>
+        <h2 id="countdown-title">—</h2>
+        <p class="countdown-value"><b id="countdown-value">30</b><span data-i18n="secondsShort">sn</span></p>
+        <button class="primary-action" id="countdown-cancel" type="button" data-i18n="cancelAction">İptal</button>
+      </div>
+    </div>
 
     <dialog id="activity-dialog" class="wide-dialog">
       <div class="activity-panel">
@@ -204,6 +346,15 @@
         <div class="dialog-actions"><button class="text-button" id="open-transfer-folder" type="button" data-i18n="openFolder">Klasörü aç</button><button class="primary-action" id="open-transfer-file" type="button" data-i18n="openFile">Dosyayı aç</button></div>
       </div>
     </dialog>
+
+    <div class="clipboard-banner hidden" id="clipboard-banner" role="status">
+      <svg class="ic" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M9 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-3"/></svg>
+      <span id="clipboard-banner-text"></span>
+      <div class="clipboard-banner-actions">
+        <button id="clipboard-banner-add" type="button" data-i18n="addToQueue">Kuyruğa ekle</button>
+        <button id="clipboard-banner-dismiss" type="button" data-i18n="dismiss">Yoksay</button>
+      </div>
+    </div>
 
     <div class="toast hidden" id="toast" role="status"></div>
     <script src="app.js"></script>

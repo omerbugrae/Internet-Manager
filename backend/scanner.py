@@ -36,7 +36,7 @@ class LinkParser(HTMLParser):
 async def scan_url(url: str) -> dict:
     await ensure_public_url(url)
     timeout = aiohttp.ClientTimeout(total=30, connect=10, sock_read=15)
-    headers = {"User-Agent": "InternetManager/0.6.0"}
+    headers = {"User-Agent": "InternetManager/0.8.0"}
     async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
         async with session.get(url, allow_redirects=True) as response:
             await ensure_public_url(str(response.url))
@@ -72,6 +72,20 @@ async def scan_url(url: str) -> dict:
         items = [item for item in inspected if isinstance(item, dict) and item.get("downloadable")]
         items.sort(key=lambda item: (item["category"], item["filename"].lower()))
         return {"sourceUrl": url, "items": items}
+
+
+async def probe_urls(urls: list[str]) -> list[dict]:
+    timeout = aiohttp.ClientTimeout(total=20, connect=10, sock_read=15)
+    headers = {"User-Agent": "InternetManager/0.8.0"}
+    async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
+        semaphore = asyncio.Semaphore(6)
+
+        async def inspect(url: str) -> dict:
+            async with semaphore:
+                return await inspect_url(session, url)
+
+        results = await asyncio.gather(*(inspect(url) for url in urls))
+        return list(results)
 
 
 async def inspect_url(session: aiohttp.ClientSession, url: str) -> dict:

@@ -5,6 +5,8 @@ import json
 import os
 import sys
 import threading
+import uuid
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -19,8 +21,8 @@ from downloader import (
     partial_size,
     user_facing_error,
 )
-from protocol import BulkPayload, Command, DownloadPayload, PriorityPayload, ProfileTestPayload, ProviderListPayload, ScanPayload, SettingsPayload, TransferPayload, UploadPayload, UploadRetryPayload
-from scanner import scan_url
+from protocol import AutomationPayload, BulkPayload, Command, DownloadPayload, NetworkPayload, PriorityPayload, ProbePayload, ProfileTestPayload, ProviderListPayload, ScanPayload, SchedulePayload, SettingsPayload, TransferPayload, UploadPayload, UploadRetryPayload
+from scanner import probe_urls, scan_url
 from storage import TransferStore, public_transfer
 from uploader import list_remote, test_connection, upload_error, upload_file
 
@@ -36,9 +38,21 @@ class TransferEngine:
         self.store = TransferStore(data_dir)
         self.store.mark_interrupted_as_paused()
         self.max_concurrent = int(self.store.get_setting("max_concurrent", "3"))
-        global_limit = int(self.store.get_setting("global_speed_limit", "0"))
-        self.global_limiter = BandwidthLimiter(global_limit)
+        self.base_speed_limit = int(self.store.get_setting("global_speed_limit", "0"))
+        self.global_limiter = BandwidthLimiter(self.base_speed_limit)
         self.upload_connections: dict[str, dict[str, Any]] = {}
+        self.speed_windows = self.load_speed_windows()
+        self.missed_policy = self.store.get_setting("missed_schedule_policy", "run")
+        self.active_window_limit: int | None = None
+        self.auto_paused: set[str] = set()
+        self.online = True
+
+    def load_speed_windows(self) -> list[dict[str, Any]]:
+        try:
+            windows = json.loads(self.store.get_setting("speed_windows", "[]"))
+        except json.JSONDecodeError:
+            return []
+        return windows if isinstance(windows, list) else []
 
     def emit(self, message: dict[str, Any]) -> None:
         with self.output_lock:
@@ -62,6 +76,7 @@ class TransferEngine:
             "settings": {
                 "maxConcurrent": self.max_concurrent,
                 "globalSpeedLimit": self.global_limiter.rate,
+                "automation": self.automation_settings(),
             },
         })
 
@@ -74,6 +89,197 @@ class TransferEngine:
         record = self.store.get(transfer_id)
         self.emit({"type": f"{record['direction']}.queued", "transferId": transfer_id})
         self.schedule()
+
+    def automation_settings(self) -> dict[str, Any]:
+        return {
+            "speedWindows": self.speed_windows,
+            "missedPolicy": self.missed_policy,
+            "activeWindowLimit": self.active_window_limit,
+            "baseSpeedLimit": self.base_speed_limit,
+        }
+
+    @staticmethod
+    def parse_moment(value: str | None) -> datetime | None:
+        if not value:
+            return None
+        try:
+            parsed = datetime.fromisoformat(value)
+        except ValueError:
+            return None
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+
+    @staticmethod
+    def next_occurrence(moment: datetime, rule: str) -> datetime | None:
+        if rule == "daily":
+            return moment + timedelta(days=1)
+        if rule == "weekly":
+            return moment + timedelta(weeks=1)
+        return None
+
+    def current_window_limit(self) -> int | None:
+        current = datetime.now().strftime("%H:%M")
+        for window in self.speed_windows:
+            start, end, limit = window.get("start"), window.get("end"), window.get("limit")
+            if not isinstance(start, str) or not isinstance(end, str) or not isinstance(limit, int):
+                continue
+            inside = start <= current < end if start <= end else (current >= start or current < end)
+            if inside:
+                return max(limit, 0)
+        return None
+
+    def apply_speed_window(self) -> None:
+        limit = self.current_window_limit()
+        if limit == self.active_window_limit:
+            return
+        self.active_window_limit = limit
+        effective = self.base_speed_limit if limit is None else limit
+        self.global_limiter.set_rate(effective)
+        self.emit({
+            "type": "settings.updated",
+            "maxConcurrent": self.max_concurrent,
+            "globalSpeedLimit": effective,
+            "activeWindowLimit": limit,
+        })
+
+    def apply_missed_schedules(self) -> None:
+        if self.missed_policy != "skip":
+            return
+        now = datetime.now(UTC)
+        for record in self.store.list_all():
+            if record["status"] != "scheduled":
+                continue
+            moment = self.parse_moment(record["scheduled_at"])
+            if moment is None or moment > now:
+                continue
+            upcoming = moment
+            while upcoming <= now:
+                following = self.next_occurrence(upcoming, record["repeat_rule"])
+                if following is None:
+                    self.store.update(record["id"], status="cancelled", scheduled_at=None)
+                    self.emit({
+                        "type": f"{record['direction']}.cancelled", "transferId": record["id"],
+                        "downloadedBytes": 0, "uploadedBytes": 0,
+                    })
+                    upcoming = None
+                    break
+                upcoming = following
+            if upcoming is not None:
+                self.store.update(record["id"], scheduled_at=upcoming.isoformat())
+                self.emit({
+                    "type": "transfer.scheduled", "transferId": record["id"],
+                    "scheduledAt": upcoming.isoformat(), "repeatRule": record["repeat_rule"],
+                })
+
+    def create_next_occurrence(self, record: dict[str, Any], upcoming: datetime) -> None:
+        new_id = str(uuid.uuid4())
+        if record["direction"] == "upload":
+            self.store.create_upload({
+                "id": new_id, "source_path": record["source_path"], "remote_path": record["remote_path"],
+                "provider": record["provider"], "profile_id": record["profile_id"],
+                "conflict_policy": record["conflict_policy"], "total_bytes": record["total_bytes"] or 0,
+                "priority": record["priority"], "speed_limit": record["speed_limit"],
+                "scheduled_at": upcoming.isoformat(), "repeat_rule": record["repeat_rule"],
+            })
+            connection = self.upload_connections.get(record["id"])
+            if connection is not None:
+                self.upload_connections[new_id] = connection
+        else:
+            self.store.create({
+                "id": new_id, "url": record["url"], "destination": record["destination"],
+                "partial_path": record["partial_path"], "conflict_policy": record["conflict_policy"],
+                "priority": record["priority"], "speed_limit": record["speed_limit"],
+                "scheduled_at": upcoming.isoformat(), "repeat_rule": record["repeat_rule"],
+            })
+        fresh = self.store.get(new_id)
+        self.emit({"type": f"{record['direction']}.created", **public_transfer(fresh)})
+
+    def start_scheduled(self, record: dict[str, Any], moment: datetime, now: datetime) -> None:
+        transfer_id = record["id"]
+        rule = record["repeat_rule"]
+        upcoming = None
+        if rule != "none":
+            upcoming = self.next_occurrence(moment, rule)
+            while upcoming is not None and upcoming <= now:
+                upcoming = self.next_occurrence(upcoming, rule)
+
+        if record["direction"] == "upload" and transfer_id not in self.upload_connections:
+            message = "Zamanlanmış yükleme için bağlantı profili yeniden seçilmeli."
+            self.store.update(transfer_id, status="failed", scheduled_at=None, error=message)
+            self.emit({"type": "upload.failed", "transferId": transfer_id, "message": message})
+            if upcoming is not None:
+                self.create_next_occurrence(record, upcoming)
+            return
+
+        if record["direction"] == "download":
+            destination = Path(record["destination"])
+            if destination.exists():
+                if record["conflict_policy"] == "skip":
+                    self.store.update(transfer_id, status="skipped", scheduled_at=None)
+                    self.emit({
+                        "type": "download.skipped", "transferId": transfer_id,
+                        "message": "Aynı adlı dosya zaten bulunduğu için zamanlanmış indirme atlandı.",
+                    })
+                    if upcoming is not None:
+                        self.create_next_occurrence(record, upcoming)
+                    return
+                if record["conflict_policy"] == "rename":
+                    destination = available_name(destination)
+                    self.store.update(
+                        transfer_id, destination=str(destination),
+                        partial_path=str(destination.with_name(f"{destination.name}.part")),
+                    )
+
+        self.store.update(transfer_id, scheduled_at=None, repeat_rule="none")
+        self.queue(transfer_id)
+        if upcoming is not None:
+            self.create_next_occurrence(record, upcoming)
+
+    async def scheduler_tick(self) -> None:
+        self.apply_speed_window()
+        now = datetime.now(UTC)
+        for record in self.store.list_all():
+            if record["status"] != "scheduled":
+                continue
+            moment = self.parse_moment(record["scheduled_at"])
+            if moment is None or moment > now:
+                continue
+            self.start_scheduled(record, moment, now)
+
+    async def scheduler_loop(self) -> None:
+        while True:
+            await asyncio.sleep(15)
+            try:
+                await self.scheduler_tick()
+            except Exception:
+                self.emit({"type": "engine.error", "message": "Zamanlanmış görev denetimi tamamlanamadı."})
+
+    async def handle_network_change(self, online: bool) -> None:
+        if online == self.online:
+            return
+        self.online = online
+        if not online:
+            for transfer_id, control in list(self.controls.items()):
+                record = self.store.get(transfer_id)
+                if record and record["status"] in {"downloading", "uploading", "retrying", "waiting"}:
+                    self.auto_paused.add(transfer_id)
+                    control.stop("pause")
+            self.emit({"type": "network.offline", "pausedTransfers": len(self.auto_paused)})
+            return
+
+        await asyncio.sleep(2)
+        resumed = 0
+        for transfer_id in list(self.auto_paused):
+            self.auto_paused.discard(transfer_id)
+            for _ in range(20):
+                record = self.store.get(transfer_id)
+                if record is None or record["status"] not in {"downloading", "uploading", "retrying"}:
+                    break
+                await asyncio.sleep(0.5)
+            record = self.store.get(transfer_id)
+            if record and record["status"] == "paused":
+                await self.act_on_transfer(transfer_id, "resume")
+                resumed += 1
+        self.emit({"type": "network.online", "resumedTransfers": resumed})
 
     def schedule(self) -> None:
         available = self.max_concurrent - len(self.tasks)
@@ -277,16 +483,18 @@ class TransferEngine:
             self.snapshot()
         elif command.type == "download.start":
             payload = DownloadPayload.model_validate(command.payload)
+            scheduled_at = self.normalize_schedule(payload.scheduled_at)
             prepared = self.prepare_destination(payload)
             if prepared is None:
                 self.emit({"type": "download.skipped", "transferId": payload.transfer_id, "message": "Aynı adlı dosya zaten bulunduğu için indirme atlandı."})
                 return {"skipped": True}
             destination, partial = prepared
-            self.store.create({"id": payload.transfer_id, "url": str(payload.url), "destination": str(destination), "partial_path": str(partial), "conflict_policy": payload.conflict_policy, "priority": payload.priority, "speed_limit": payload.speed_limit})
+            self.store.create({"id": payload.transfer_id, "url": str(payload.url), "destination": str(destination), "partial_path": str(partial), "conflict_policy": payload.conflict_policy, "priority": payload.priority, "speed_limit": payload.speed_limit, "scheduled_at": scheduled_at, "repeat_rule": payload.repeat_rule})
             record = self.store.get(payload.transfer_id)
             self.emit({"type": "download.created", **public_transfer(record)})
-            self.queue(payload.transfer_id)
-            return {"transferId": payload.transfer_id, "destination": str(destination)}
+            if scheduled_at is None:
+                self.queue(payload.transfer_id)
+            return {"transferId": payload.transfer_id, "destination": str(destination), "scheduledAt": scheduled_at}
         elif command.type in {"download.pause", "download.resume", "download.cancel", "download.retry"}:
             payload = TransferPayload.model_validate(command.payload)
             await self.act_on_transfer(payload.transfer_id, command.type.split(".")[1])
@@ -302,28 +510,34 @@ class TransferEngine:
         elif command.type == "settings.update":
             payload = SettingsPayload.model_validate(command.payload)
             self.max_concurrent = payload.max_concurrent
-            self.global_limiter.set_rate(payload.global_speed_limit)
+            self.base_speed_limit = payload.global_speed_limit
             self.store.set_setting("max_concurrent", str(payload.max_concurrent))
             self.store.set_setting("global_speed_limit", str(payload.global_speed_limit))
-            self.emit({"type": "settings.updated", "maxConcurrent": self.max_concurrent, "globalSpeedLimit": self.global_limiter.rate})
+            window_limit = self.current_window_limit()
+            self.active_window_limit = window_limit
+            self.global_limiter.set_rate(self.base_speed_limit if window_limit is None else window_limit)
+            self.emit({"type": "settings.updated", "maxConcurrent": self.max_concurrent, "globalSpeedLimit": self.global_limiter.rate, "activeWindowLimit": window_limit})
             self.schedule()
         elif command.type == "upload.start":
             payload = UploadPayload.model_validate(command.payload)
             source = Path(payload.source_path)
             if not source.is_file():
                 raise ValueError("Yüklenecek dosya bulunamadı.")
+            scheduled_at = self.normalize_schedule(payload.scheduled_at)
             self.store.create_upload({
                 "id": payload.transfer_id, "source_path": str(source),
                 "remote_path": payload.remote_path, "provider": payload.provider,
                 "profile_id": payload.profile_id, "conflict_policy": payload.conflict_policy,
                 "total_bytes": source.stat().st_size, "priority": payload.priority,
-                "speed_limit": payload.speed_limit,
+                "speed_limit": payload.speed_limit, "scheduled_at": scheduled_at,
+                "repeat_rule": payload.repeat_rule,
             })
             self.upload_connections[payload.transfer_id] = payload.connection
             record = self.store.get(payload.transfer_id)
             self.emit({"type": "upload.created", **public_transfer(record)})
-            self.queue(payload.transfer_id)
-            return {"transferId": payload.transfer_id}
+            if scheduled_at is None:
+                self.queue(payload.transfer_id)
+            return {"transferId": payload.transfer_id, "scheduledAt": scheduled_at}
         elif command.type in {"upload.pause", "upload.cancel"}:
             payload = TransferPayload.model_validate(command.payload)
             await self.act_on_transfer(payload.transfer_id, command.type.split(".")[1])
@@ -341,15 +555,65 @@ class TransferEngine:
         elif command.type == "scan.start":
             payload = ScanPayload.model_validate(command.payload)
             return await scan_url(str(payload.url))
+        elif command.type == "download.probe":
+            payload = ProbePayload.model_validate(command.payload)
+            items = await probe_urls([str(url) for url in payload.urls])
+            return {"items": items}
+        elif command.type == "transfer.schedule":
+            payload = SchedulePayload.model_validate(command.payload)
+            record = self.store.get(payload.transfer_id)
+            if record is None:
+                raise ValueError("Transfer bulunamadı.")
+            if record["status"] not in {"scheduled", "waiting", "paused", "cancelled", "failed", "completed", "skipped"}:
+                raise ValueError("Çalışan bir transfer zamanlanamaz.")
+            scheduled_at = self.normalize_schedule(payload.scheduled_at)
+            if scheduled_at is None:
+                self.store.update(payload.transfer_id, scheduled_at=None, repeat_rule="none")
+                if record["status"] == "scheduled":
+                    self.store.update(payload.transfer_id, status="paused")
+            else:
+                self.store.update(
+                    payload.transfer_id, scheduled_at=scheduled_at,
+                    repeat_rule=payload.repeat_rule, status="scheduled", error=None,
+                )
+            self.emit({
+                "type": "transfer.scheduled", "transferId": payload.transfer_id,
+                "scheduledAt": scheduled_at, "repeatRule": payload.repeat_rule if scheduled_at else "none",
+            })
+            return {"scheduledAt": scheduled_at}
+        elif command.type == "automation.get":
+            return self.automation_settings()
+        elif command.type == "automation.update":
+            payload = AutomationPayload.model_validate(command.payload)
+            self.speed_windows = [window.model_dump() for window in payload.speed_windows]
+            self.missed_policy = payload.missed_policy
+            self.store.set_setting("speed_windows", json.dumps(self.speed_windows))
+            self.store.set_setting("missed_schedule_policy", self.missed_policy)
+            self.active_window_limit = None
+            self.apply_speed_window()
+            return self.automation_settings()
+        elif command.type == "network.changed":
+            payload = NetworkPayload.model_validate(command.payload)
+            await self.handle_network_change(payload.online)
+            return {"online": self.online}
         return None
 
+    @staticmethod
+    def normalize_schedule(value: str | None) -> str | None:
+        moment = TransferEngine.parse_moment(value)
+        return moment.isoformat() if moment else None
+
     async def run(self) -> None:
-        self.emit({"type": "engine.ready", "version": "0.6.0"})
+        self.emit({"type": "engine.ready", "version": "0.8.0"})
+        self.apply_missed_schedules()
+        self.apply_speed_window()
         self.snapshot()
+        scheduler = asyncio.create_task(self.scheduler_loop())
         while True:
             command = await self.commands.get()
             if command is None or not await self.handle_command(command):
                 break
+        scheduler.cancel()
         if self.tasks:
             await asyncio.gather(*self.tasks.values(), return_exceptions=True)
         self.store.close()

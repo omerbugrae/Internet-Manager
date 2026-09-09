@@ -1,7 +1,7 @@
 const { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, Menu, nativeImage, nativeTheme, Notification, safeStorage, screen, shell, Tray } = require('electron')
 const { spawn } = require('node:child_process')
 const { createInterface } = require('node:readline')
-const { existsSync, readFileSync, writeFileSync } = require('node:fs')
+const { existsSync, readFileSync, statSync, writeFileSync } = require('node:fs')
 const path = require('node:path')
 const crypto = require('node:crypto')
 
@@ -20,8 +20,15 @@ const DEFAULT_DESKTOP_SETTINGS = {
   notifications: true,
   launchAtStartup: false,
   theme: 'system',
-  language: 'tr'
+  language: 'tr',
+  clipboardSuggest: false,
+  completionAction: 'none'
 }
+
+const PROTOCOL_SCHEME = 'internet-manager'
+let lastSuggestedClipboardText = ''
+let pendingQuickAddUrls = []
+let pendingQuickAddFiles = []
 
 const ACTIVITY_TYPES = new Set([
   'download.created', 'download.paused', 'download.retrying', 'download.completed',
@@ -139,7 +146,9 @@ function loadDesktopSettings() {
       notifications: typeof saved.notifications === 'boolean' ? saved.notifications : true,
       launchAtStartup: typeof saved.launchAtStartup === 'boolean' ? saved.launchAtStartup : false,
       theme: ['system', 'light', 'dark'].includes(saved.theme) ? saved.theme : 'system',
-      language: ['tr', 'en'].includes(saved.language) ? saved.language : 'tr'
+      language: ['tr', 'en'].includes(saved.language) ? saved.language : 'tr',
+      clipboardSuggest: typeof saved.clipboardSuggest === 'boolean' ? saved.clipboardSuggest : false,
+      completionAction: ['none', 'quit', 'sleep', 'shutdown'].includes(saved.completionAction) ? saved.completionAction : 'none'
     }
   } catch {
     return { ...DEFAULT_DESKTOP_SETTINGS }
@@ -148,6 +157,23 @@ function loadDesktopSettings() {
 
 function saveDesktopSettings(settings) {
   writeFileSync(desktopSettingsPath(), JSON.stringify(settings, null, 2), 'utf8')
+}
+
+function templatesPath() {
+  return path.join(app.getPath('userData'), 'templates.json')
+}
+
+function loadTemplates() {
+  try {
+    const list = JSON.parse(readFileSync(templatesPath(), 'utf8'))
+    return Array.isArray(list) ? list : []
+  } catch {
+    return []
+  }
+}
+
+function saveTemplates(list) {
+  writeFileSync(templatesPath(), JSON.stringify(list, null, 2), 'utf8')
 }
 
 function activityPath() {
@@ -341,6 +367,19 @@ function createWindow() {
 
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'))
   mainWindow.once('ready-to-show', () => mainWindow.show())
+  mainWindow.webContents.once('did-finish-load', () => {
+    if (pendingQuickAddUrls.length) {
+      mainWindow.webContents.send('quick-add:urls', pendingQuickAddUrls)
+      pendingQuickAddUrls = []
+    }
+    if (pendingQuickAddFiles.length) {
+      mainWindow.webContents.send('quick-add:files', pendingQuickAddFiles)
+      pendingQuickAddFiles = []
+    }
+  })
+  mainWindow.on('focus', () => {
+    if (desktopSettings?.clipboardSuggest) void checkClipboardSuggestion()
+  })
   mainWindow.on('close', (event) => {
     if (!app.isQuitting && desktopSettings?.closeToTray) {
       event.preventDefault()
@@ -348,6 +387,76 @@ function createWindow() {
     }
   })
   mainWindow.on('closed', () => { mainWindow = null })
+}
+
+async function checkClipboardSuggestion() {
+  let text = ''
+  try {
+    text = (await clipboard.readText())?.trim() || ''
+  } catch {
+    return
+  }
+  if (!/^https?:\/\//i.test(text) || text === lastSuggestedClipboardText) return
+  lastSuggestedClipboardText = text
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('clipboard:suggestion', text)
+}
+
+function extractQuickAddUrls(argv) {
+  const urls = []
+  for (const arg of argv) {
+    if (typeof arg !== 'string') continue
+    if (arg.startsWith(`${PROTOCOL_SCHEME}://`)) {
+      try {
+        const parsed = new URL(arg)
+        const fromQuery = parsed.searchParams.get('url')
+        const rest = arg.slice(`${PROTOCOL_SCHEME}://`.length).replace(/^\/+/, '')
+        const candidate = fromQuery || decodeURIComponent(rest)
+        if (/^https?:\/\//i.test(candidate)) urls.push(candidate)
+      } catch {
+        // ignore malformed protocol argument
+      }
+      continue
+    }
+    if (/^https?:\/\//i.test(arg)) urls.push(arg)
+  }
+  return urls
+}
+
+function extractQuickAddFilePaths(argv) {
+  const paths = []
+  for (const arg of argv) {
+    if (typeof arg !== 'string' || !arg.trim()) continue
+    if (arg.startsWith('-') || arg.startsWith(`${PROTOCOL_SCHEME}://`) || /^https?:\/\//i.test(arg)) continue
+    if (arg === '.' || path.resolve(arg) === app.getAppPath() || arg === process.execPath) continue
+    try {
+      if (existsSync(arg) && statSync(arg).isFile()) paths.push(path.resolve(arg))
+    } catch {
+      // not a usable local file path, ignore
+    }
+  }
+  return paths
+}
+
+function handleQuickAddArgs(argv) {
+  const urls = extractQuickAddUrls(argv)
+  const filePaths = extractQuickAddFilePaths(argv)
+  const windowReady = mainWindow && !mainWindow.isDestroyed() && !mainWindow.webContents.isLoadingMainFrame()
+  if (urls.length) {
+    if (windowReady) {
+      showMainWindow()
+      mainWindow.webContents.send('quick-add:urls', urls)
+    } else {
+      pendingQuickAddUrls.push(...urls)
+    }
+  }
+  if (filePaths.length) {
+    if (windowReady) {
+      showMainWindow()
+      mainWindow.webContents.send('quick-add:files', filePaths)
+    } else {
+      pendingQuickAddFiles.push(...filePaths)
+    }
+  }
 }
 
 async function showCapturePanel() {
@@ -391,6 +500,14 @@ ipcMain.handle('download:choose-destination', async (_event, suggestedName) => {
   return result.canceled ? null : result.filePath
 })
 
+ipcMain.handle('download:choose-folder', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'İndirmelerin kaydedileceği klasörü seç',
+    properties: ['openDirectory', 'createDirectory']
+  })
+  return result.canceled || !result.filePaths[0] ? null : result.filePaths[0]
+})
+
 ipcMain.handle('upload:choose-files', async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
     title: 'Yüklenecek dosyaları seç', properties: ['openFile', 'multiSelections']
@@ -416,9 +533,148 @@ ipcMain.handle('download:start', async (_event, input) => {
       : 'overwrite',
     speed_limit: Number.isFinite(input.speedLimit) && input.speedLimit > 0
       ? Math.round(input.speedLimit)
-      : 0
+      : 0,
+    scheduled_at: typeof input.scheduledAt === 'string' && input.scheduledAt ? input.scheduledAt : null,
+    repeat_rule: ['none', 'daily', 'weekly'].includes(input.repeatRule) ? input.repeatRule : 'none'
   })
   return { transferId, ...result }
+})
+
+ipcMain.handle('download:bulk-start', async (_event, input) => {
+  const folder = typeof input?.folder === 'string' ? input.folder : ''
+  const items = Array.isArray(input?.items) ? input.items : []
+  if (!folder || !items.length) return []
+  const conflictPolicy = ['overwrite', 'rename', 'skip'].includes(input.conflictPolicy) ? input.conflictPolicy : 'overwrite'
+  const speedLimit = Number.isFinite(input.speedLimit) && input.speedLimit > 0 ? Math.round(input.speedLimit) : 0
+  const results = []
+  for (const item of items) {
+    if (!item || typeof item.url !== 'string' || !/^https?:\/\//i.test(item.url)) {
+      results.push({ url: item?.url, ok: false, error: 'Geçersiz bağlantı.' })
+      continue
+    }
+    const safeName = (typeof item.filename === 'string' && item.filename.trim() ? item.filename.trim() : 'download').replace(/[<>:"/\\|?*]/g, '_')
+    const destination = path.join(folder, safeName)
+    try {
+      const transferId = crypto.randomUUID()
+      const result = await sendCommand('download.start', {
+        transfer_id: transferId,
+        url: item.url,
+        destination,
+        conflict_policy: conflictPolicy,
+        speed_limit: speedLimit
+      })
+      results.push({ url: item.url, ok: true, transferId, destination, ...result })
+    } catch (error) {
+      results.push({ url: item.url, ok: false, error: error.message })
+    }
+  }
+  return results
+})
+
+ipcMain.handle('bulk:parse-file', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Bağlantı listesi dosyası seç',
+    properties: ['openFile'],
+    filters: [{ name: 'Metin veya CSV', extensions: ['txt', 'csv'] }]
+  })
+  if (result.canceled || !result.filePaths[0]) return null
+  const content = readFileSync(result.filePaths[0], 'utf8')
+  const urls = []
+  let invalidLines = 0
+  for (const rawLine of content.split(/\r?\n/)) {
+    const line = rawLine.trim()
+    if (!line) continue
+    const candidate = line.includes(',') ? line.split(',')[0].trim().replace(/^"|"$/g, '') : line
+    if (/^https?:\/\//i.test(candidate)) urls.push(candidate)
+    else invalidLines += 1
+  }
+  return { urls, invalidLines, fileName: path.basename(result.filePaths[0]) }
+})
+
+ipcMain.handle('bulk:probe', async (_event, urls) => {
+  const validUrls = Array.isArray(urls)
+    ? urls.filter((url) => typeof url === 'string' && /^https?:\/\//i.test(url)).slice(0, 200)
+    : []
+  if (!validUrls.length) return { items: [] }
+  const timeoutMs = Math.max(30000, validUrls.length * 4000)
+  return sendCommand('download.probe', { urls: validUrls }, timeoutMs)
+})
+
+ipcMain.handle('transfer:schedule', async (_event, transferId, scheduledAt, repeatRule) => {
+  if (typeof transferId !== 'string' || !transferId) throw new Error('Transfer bulunamadı.')
+  return sendCommand('transfer.schedule', {
+    transfer_id: transferId,
+    scheduled_at: typeof scheduledAt === 'string' && scheduledAt ? scheduledAt : null,
+    repeat_rule: ['none', 'daily', 'weekly'].includes(repeatRule) ? repeatRule : 'none'
+  })
+})
+
+ipcMain.handle('automation:get', () => sendCommand('automation.get'))
+
+ipcMain.handle('automation:update', async (_event, input) => {
+  const windows = Array.isArray(input?.speedWindows) ? input.speedWindows : []
+  const speedWindows = windows
+    .filter((window) => /^([01]\d|2[0-3]):[0-5]\d$/.test(window?.start) && /^([01]\d|2[0-3]):[0-5]\d$/.test(window?.end))
+    .slice(0, 12)
+    .map((window) => ({
+      start: window.start,
+      end: window.end,
+      limit: Number.isFinite(window.limit) ? Math.max(Math.round(window.limit), 0) : 0
+    }))
+  return sendCommand('automation.update', {
+    speed_windows: speedWindows,
+    missed_policy: ['run', 'skip'].includes(input?.missedPolicy) ? input.missedPolicy : 'run'
+  })
+})
+
+ipcMain.handle('network:changed', async (_event, online) => {
+  if (!engineReady) return { online: Boolean(online) }
+  return sendCommand('network.changed', { online: Boolean(online) })
+})
+
+ipcMain.handle('system:action', async (_event, action) => {
+  if (!['quit', 'sleep', 'shutdown'].includes(action)) throw new Error('Geçersiz sistem eylemi.')
+  if (action === 'quit') {
+    app.isQuitting = true
+    app.quit()
+    return true
+  }
+  if (process.platform !== 'win32') throw new Error('Bu sistem eylemi yalnızca Windows üzerinde desteklenir.')
+  const command = action === 'sleep'
+    ? { file: 'rundll32.exe', args: ['powrprof.dll,SetSuspendState', '0,1,0'] }
+    : { file: 'shutdown', args: ['/s', '/t', '0'] }
+  const child = spawn(command.file, command.args, { windowsHide: true, detached: true, stdio: 'ignore' })
+  child.unref()
+  return true
+})
+
+ipcMain.handle('templates:list', () => loadTemplates())
+
+ipcMain.handle('templates:save', (_event, template) => {
+  if (!template?.name?.trim() || !['download', 'upload'].includes(template.kind)) {
+    throw new Error('Şablon bilgileri eksik.')
+  }
+  const list = loadTemplates()
+  const id = template.id || crypto.randomUUID()
+  const record = {
+    id,
+    name: template.name.trim(),
+    kind: template.kind,
+    destination: typeof template.destination === 'string' ? template.destination : '',
+    profileId: typeof template.profileId === 'string' ? template.profileId : '',
+    remotePath: typeof template.remotePath === 'string' ? template.remotePath : '',
+    conflictPolicy: ['overwrite', 'rename', 'skip'].includes(template.conflictPolicy) ? template.conflictPolicy : 'overwrite',
+    speedLimit: Number.isFinite(template.speedLimit) ? Math.max(Math.round(template.speedLimit), 0) : 0
+  }
+  const next = list.filter((item) => item.id !== id)
+  next.push(record)
+  saveTemplates(next)
+  return record
+})
+
+ipcMain.handle('templates:delete', (_event, templateId) => {
+  saveTemplates(loadTemplates().filter((item) => item.id !== templateId))
+  return true
 })
 
 ipcMain.handle('download:cancel', async (_event, transferId) => {
@@ -597,7 +853,9 @@ ipcMain.handle('upload:start', async (_event, input) => {
     transfer_id: transferId, source_path: input.sourcePath, remote_path: input.remotePath,
     provider: profile.provider, profile_id: profile.id, connection: decryptConnection(profile),
     conflict_policy: ['overwrite', 'rename', 'skip'].includes(input.conflictPolicy) ? input.conflictPolicy : 'overwrite',
-    speed_limit: Number.isFinite(input.speedLimit) ? Math.max(Math.round(input.speedLimit), 0) : 0
+    speed_limit: Number.isFinite(input.speedLimit) ? Math.max(Math.round(input.speedLimit), 0) : 0,
+    scheduled_at: typeof input.scheduledAt === 'string' && input.scheduledAt ? input.scheduledAt : null,
+    repeat_rule: ['none', 'daily', 'weekly'].includes(input.repeatRule) ? input.repeatRule : 'none'
   })
 })
 
@@ -645,7 +903,9 @@ ipcMain.handle('desktop-settings:update', (_event, input) => {
     notifications: Boolean(input?.notifications),
     launchAtStartup: Boolean(input?.launchAtStartup),
     theme: ['system', 'light', 'dark'].includes(input?.theme) ? input.theme : 'system',
-    language: ['tr', 'en'].includes(input?.language) ? input.language : 'tr'
+    language: ['tr', 'en'].includes(input?.language) ? input.language : 'tr',
+    clipboardSuggest: Boolean(input?.clipboardSuggest),
+    completionAction: ['none', 'quit', 'sleep', 'shutdown'].includes(input?.completionAction) ? input.completionAction : 'none'
   }
   saveDesktopSettings(desktopSettings)
   app.setLoginItemSettings({
@@ -685,28 +945,44 @@ ipcMain.handle('engine:status', () => ({
   settings: engineSettings
 }))
 
-app.whenReady().then(() => {
-  app.setAppUserModelId('com.internetmanager.desktop')
-  desktopSettings = loadDesktopSettings()
-  startEngine()
-  createWindow()
-  createTray()
-  nativeTheme.on('updated', () => {
-    if (desktopSettings.theme === 'system' && mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.setTitleBarOverlay(titleBarOverlay())
-    }
-  })
-  const captureShortcut = () => {
-    void showCapturePanel().catch((error) => console.error(`Yakalama paneli açılamadı: ${error.message}`))
-  }
-  if (!globalShortcut.register('CommandOrControl+Alt+D', captureShortcut)) {
-    console.error('Ctrl+Alt+D kısayolu başka bir uygulama tarafından kullanılıyor.')
-  }
-
-  app.on('activate', () => {
+const gotSingleInstanceLock = app.requestSingleInstanceLock()
+if (!gotSingleInstanceLock) {
+  app.quit()
+} else {
+  app.on('second-instance', (_event, argv) => {
     showMainWindow()
+    handleQuickAddArgs(argv)
   })
-})
+
+  app.whenReady().then(() => {
+    app.setAppUserModelId('com.internetmanager.desktop')
+    if (process.defaultApp && process.argv.length >= 2) {
+      app.setAsDefaultProtocolClient(PROTOCOL_SCHEME, process.execPath, [path.resolve(process.argv[1])])
+    } else {
+      app.setAsDefaultProtocolClient(PROTOCOL_SCHEME)
+    }
+    desktopSettings = loadDesktopSettings()
+    startEngine()
+    createWindow()
+    createTray()
+    handleQuickAddArgs(process.argv)
+    nativeTheme.on('updated', () => {
+      if (desktopSettings.theme === 'system' && mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.setTitleBarOverlay(titleBarOverlay())
+      }
+    })
+    const captureShortcut = () => {
+      void showCapturePanel().catch((error) => console.error(`Yakalama paneli açılamadı: ${error.message}`))
+    }
+    if (!globalShortcut.register('CommandOrControl+Alt+D', captureShortcut)) {
+      console.error('Ctrl+Alt+D kısayolu başka bir uygulama tarafından kullanılıyor.')
+    }
+
+    app.on('activate', () => {
+      showMainWindow()
+    })
+  })
+}
 
 app.on('before-quit', () => {
   app.isQuitting = true

@@ -33,9 +33,13 @@ let remoteBrowserPath = '/'
 const settingsDialog = document.querySelector('#settings-dialog')
 const activityDialog = document.querySelector('#activity-dialog')
 const detailsDialog = document.querySelector('#details-dialog')
-let desktopSettings = { closeToTray: true, notifications: true, launchAtStartup: false, theme: 'system', language: 'tr' }
+let desktopSettings = { closeToTray: true, notifications: true, launchAtStartup: false, clipboardSuggest: false, theme: 'system', language: 'tr' }
 let currentTransferFilter = 'all'
 let detailsTransferId = null
+let automationSettings = { speedWindows: [], missedPolicy: 'run', activeWindowLimit: null, baseSpeedLimit: 0 }
+let speedWindowDraft = []
+let countdownTimer = null
+let completionArmed = true
 
 const translations = {
   tr: {
@@ -65,7 +69,27 @@ const translations = {
     secretsNotWritten: 'Parolalar ve gizli anahtarlar dosyaya yazılmaz.', close: 'Kapat', saveProfile: 'Profili kaydet',
     remoteTargetEyebrow: 'UZAK HEDEF', addFolderToRoute: 'Klasörü rotaya ekle.', parentFolder: 'Üst klasör', foldersLoading: 'Klasörler getiriliyor…', selectThisFolder: 'Bu klasörü seç',
     transferFilters: 'Transfer filtreleri', s3Compatible: 'S3 uyumlu', activityFilter: 'Aktivite filtresi',
-    selectTransfer: 'Transferi seç', downloadProgress: 'İndirme ilerlemesi'
+    selectTransfer: 'Transferi seç', downloadProgress: 'İndirme ilerlemesi',
+    bulkAdd: 'Toplu ekle', bulkAddEyebrow: 'TOPLU EKLE', bulkHeading: 'Çok sayıda bağlantıyı birlikte ekle.',
+    bulkUrlsLabel: 'Bağlantılar (her satıra bir tane)', importFromFile: '.txt / .csv içe aktar', scanLinks: 'Bağlantıları tara',
+    startSelectedDownloads: 'Seçilenleri indir', addToQueue: 'Kuyruğa ekle', dismiss: 'Yoksay',
+    template: 'Şablon', deleteTemplate: 'Sil', saveAsTemplate: 'Şablon olarak kaydet', templateName: 'Şablon adı', noTemplate: 'Şablon seçilmedi',
+    clipboardSuggest: 'Pano bağlantısını algıla', clipboardSuggestHelp: 'Pencereye her dönüşte panoda bağlantı varsa kuyruğa eklemeyi öner.',
+    duplicateInQueue: 'Zaten kuyrukta', invalidLine: 'geçersiz satır', validLinks: 'geçerli bağlantı',
+    clipboardFoundLink: 'Panoda bir bağlantı var',
+    automation: 'Otomasyon', automationEyebrow: 'OTOMASYON', automationTitle: 'Hat kendi kendini yönetsin.',
+    startAt: 'Başlangıç zamanı', repeat: 'Tekrar', repeatNone: 'Tekrarlama', repeatDaily: 'Her gün', repeatWeekly: 'Her hafta',
+    scheduleHint: 'Boş bırakılırsa transfer hemen kuyruğa alınır.',
+    speedWindows: 'Saat aralığına göre hız limiti', addWindow: 'Aralık ekle',
+    speedWindowHint: 'Aralık dışındaki saatlerde genel limit geçerlidir.', noSpeedWindow: 'Henüz aralık eklenmedi.',
+    removeWindow: 'Aralığı kaldır',
+    missedPolicy: 'Kaçırılmış zamanlanmış görevler', missedRun: 'Uygulama açılınca hemen başlat', missedSkip: 'Atla ve sıradaki tekrarı bekle',
+    completionAction: 'Tüm transferler bitince', completionNone: 'Hiçbir şey yapma', completionQuit: 'Uygulamayı kapat',
+    completionSleep: 'Bilgisayarı uyut', completionShutdown: 'Bilgisayarı kapat',
+    completionHint: 'Eylemden önce 30 saniyelik geri sayım gösterilir, istediğin an iptal edebilirsin.',
+    secondsShort: 'sn', countdownQuit: 'Uygulama kapatılıyor', countdownSleep: 'Bilgisayar uyutuluyor', countdownShutdown: 'Bilgisayar kapatılıyor',
+    networkOffline: 'Bağlantı koptu; aktif transferler duraklatıldı.', networkOnline: 'Bağlantı geri geldi; transferler sürdürülüyor.',
+    scheduledFor: 'Planlandı', startNow: 'Şimdi başlat'
   },
   en: {
     newDownload: 'New download', newUpload: 'New upload', allTransfers: 'All transfers', downloads: 'Downloads', uploads: 'Uploads',
@@ -94,7 +118,27 @@ const translations = {
     secretsNotWritten: 'Passwords and secret keys are never written to the file.', close: 'Close', saveProfile: 'Save profile',
     remoteTargetEyebrow: 'REMOTE TARGET', addFolderToRoute: 'Add a folder to the route.', parentFolder: 'Parent folder', foldersLoading: 'Fetching folders…', selectThisFolder: 'Select this folder',
     transferFilters: 'Transfer filters', s3Compatible: 'S3 compatible', activityFilter: 'Activity filter',
-    selectTransfer: 'Select transfer', downloadProgress: 'Download progress'
+    selectTransfer: 'Select transfer', downloadProgress: 'Download progress',
+    bulkAdd: 'Bulk add', bulkAddEyebrow: 'BULK ADD', bulkHeading: 'Add many links at once.',
+    bulkUrlsLabel: 'Links (one per line)', importFromFile: 'Import .txt / .csv', scanLinks: 'Scan links',
+    startSelectedDownloads: 'Start selected', addToQueue: 'Add to queue', dismiss: 'Dismiss',
+    template: 'Template', deleteTemplate: 'Delete', saveAsTemplate: 'Save as template', templateName: 'Template name', noTemplate: 'No template selected',
+    clipboardSuggest: 'Detect clipboard link', clipboardSuggestHelp: 'Suggest adding it to the queue whenever a link is on the clipboard when the window regains focus.',
+    duplicateInQueue: 'Already queued', invalidLine: 'invalid line', validLinks: 'valid link',
+    clipboardFoundLink: 'There’s a link on your clipboard',
+    automation: 'Automation', automationEyebrow: 'AUTOMATION', automationTitle: 'Let the line run itself.',
+    startAt: 'Start time', repeat: 'Repeat', repeatNone: 'No repeat', repeatDaily: 'Every day', repeatWeekly: 'Every week',
+    scheduleHint: 'Leave empty to queue the transfer right away.',
+    speedWindows: 'Speed limit by time range', addWindow: 'Add range',
+    speedWindowHint: 'Outside these ranges the global limit applies.', noSpeedWindow: 'No range added yet.',
+    removeWindow: 'Remove range',
+    missedPolicy: 'Missed scheduled tasks', missedRun: 'Start as soon as the app opens', missedSkip: 'Skip and wait for the next repeat',
+    completionAction: 'When all transfers finish', completionNone: 'Do nothing', completionQuit: 'Quit the app',
+    completionSleep: 'Sleep the computer', completionShutdown: 'Shut down the computer',
+    completionHint: 'A 30-second countdown appears first — you can cancel any time.',
+    secondsShort: 's', countdownQuit: 'Quitting the app', countdownSleep: 'Putting the computer to sleep', countdownShutdown: 'Shutting the computer down',
+    networkOffline: 'Connection lost — active transfers paused.', networkOnline: 'Connection is back — resuming transfers.',
+    scheduledFor: 'Scheduled', startNow: 'Start now'
   }
 }
 
@@ -107,6 +151,7 @@ function showDialog() {
   hideFormError()
   dialog.showModal()
   urlInput.focus()
+  void fillTemplateSelect(document.querySelector('#download-template'), 'download')
 }
 
 function closeDialog() {
@@ -152,7 +197,9 @@ form.addEventListener('submit', async (event) => {
       url,
       destination: destinationInput.value,
       conflictPolicy: conflictPolicy.value,
-      speedLimit: Math.max(Number(taskSpeedLimit.value) || 0, 0) * 1024 * 1024
+      speedLimit: Math.max(Number(taskSpeedLimit.value) || 0, 0) * 1024 * 1024,
+      scheduledAt: localInputToIso(document.querySelector('#download-schedule').value),
+      repeatRule: document.querySelector('#download-repeat').value
     })
     if (result.skipped) {
       closeDialog()
@@ -163,7 +210,9 @@ form.addEventListener('submit', async (event) => {
       transferId: result.transferId,
       url,
       destination: result.destination || destinationInput.value,
-      status: 'waiting',
+      status: result.scheduledAt ? 'scheduled' : 'waiting',
+      scheduledAt: result.scheduledAt || null,
+      repeatRule: document.querySelector('#download-repeat').value,
       downloadedBytes: 0,
       totalBytes: null
     })
@@ -233,8 +282,11 @@ function renderTransfer(transfer) {
   card.querySelector('.size').textContent = transfer.totalBytes
     ? `${formatBytes(transfer.downloadedBytes)} / ${formatBytes(transfer.totalBytes)}`
     : formatBytes(transfer.downloadedBytes)
-  card.querySelector('.speed').textContent = transfer.speed || '—'
-  card.querySelector('.remaining').textContent = transfer.remaining || '—'
+  const scheduleText = transfer.status === 'scheduled' && transfer.scheduledAt
+    ? `${t('scheduledFor')}: ${formatMoment(transfer.scheduledAt)}${transfer.repeatRule && transfer.repeatRule !== 'none' ? ` · ${t(transfer.repeatRule === 'daily' ? 'repeatDaily' : 'repeatWeekly')}` : ''}`
+    : ''
+  card.querySelector('.speed').textContent = scheduleText || transfer.speed || '—'
+  card.querySelector('.remaining').textContent = scheduleText ? '' : (transfer.remaining || '—')
   card.querySelector('.progress-fill').style.width = `${percent}%`
   card.querySelector('.progress-track').setAttribute('aria-label', transfer.direction === 'upload' ? 'Yükleme ilerlemesi' : 'İndirme ilerlemesi')
   card.querySelector('.progress-track').setAttribute('aria-valuenow', String(Math.round(percent)))
@@ -262,6 +314,9 @@ function renderActions(transfer) {
     container.append(actionButton(t('cancelAction'), () => performAction(transfer, 'cancel')))
   } else if (transfer.status === 'paused') {
     container.append(actionButton(transfer.direction === 'upload' ? t('reconnect') : t('resume'), () => performAction(transfer, 'resume')))
+    container.append(actionButton(t('cancelAction'), () => performAction(transfer, 'cancel')))
+  } else if (transfer.status === 'scheduled') {
+    container.append(actionButton(t('startNow'), () => void startScheduledNow(transfer)))
     container.append(actionButton(t('cancelAction'), () => performAction(transfer, 'cancel')))
   } else if (transfer.status === 'failed') {
     container.append(actionButton(t('retry'), () => performAction(transfer, 'retry')))
@@ -357,9 +412,20 @@ window.internetManager.onTransferEvent((message) => {
     ensureTransfer(message)
     return
   }
+  if (message.type === 'network.offline' || message.type === 'network.online') {
+    showToast(t(message.type === 'network.offline' ? 'networkOffline' : 'networkOnline'))
+    return
+  }
 
   const transfer = transfers.get(message.transferId)
   if (!transfer) return
+  if (message.type === 'transfer.scheduled') {
+    transfer.scheduledAt = message.scheduledAt
+    transfer.repeatRule = message.repeatRule
+    transfer.status = message.scheduledAt ? 'scheduled' : 'paused'
+    renderTransfer(transfer)
+    return
+  }
   const eventStatus = {
     'download.created': 'waiting',
     'download.started': 'downloading',
@@ -412,14 +478,22 @@ function statusLabel(transfer) {
   const labels = desktopSettings.language === 'en' ? {
     waiting: 'Queued', downloading: 'Downloading', uploading: 'Uploading', paused: 'Paused',
     pausing: 'Pausing', retrying: `Retrying (${transfer.retryCount || 1}/3)`, completed: 'Completed',
-    cancelled: 'Cancelled', cancelling: 'Cancelling', failed: 'Failed', skipped: 'Skipped'
+    cancelled: 'Cancelled', cancelling: 'Cancelling', failed: 'Failed', skipped: 'Skipped',
+    scheduled: 'Scheduled'
   } : {
     waiting: 'Kuyrukta', downloading: 'İndiriliyor', uploading: 'Yükleniyor', paused: 'Duraklatıldı',
     pausing: 'Duraklatılıyor', retrying: `Yeniden deneniyor (${transfer.retryCount || 1}/3)`,
     completed: 'Tamamlandı', cancelled: 'İptal edildi', cancelling: 'İptal ediliyor',
-    failed: 'Başarısız', skipped: 'Atlandı'
+    failed: 'Başarısız', skipped: 'Atlandı', scheduled: 'Zamanlandı'
   }
   return labels[transfer.status] || transfer.status
+}
+
+function formatMoment(value) {
+  if (!value) return ''
+  const moment = new Date(value)
+  if (Number.isNaN(moment.getTime())) return ''
+  return new Intl.DateTimeFormat(desktopSettings.language, { dateStyle: 'short', timeStyle: 'short' }).format(moment)
 }
 
 function updateBoard() {
@@ -427,6 +501,7 @@ function updateBoard() {
   emptyState.classList.toggle('hidden', hasTransfers)
   transferList.classList.toggle('hidden', !hasTransfers)
   activeCount.textContent = [...transfers.values()].filter((transfer) => transfer.active).length
+  checkCompletionAutomation()
 }
 
 function formatBytes(bytes) {
@@ -475,9 +550,13 @@ window.internetManager.engineStatus().then(({ ready, transfers: cachedTransfers,
   for (const record of cachedTransfers) ensureTransfer(record)
   if (settings) {
     document.querySelector('#max-concurrent').value = settings.maxConcurrent
-    document.querySelector('#global-speed-limit').value = settings.globalSpeedLimit
-      ? (settings.globalSpeedLimit / 1024 / 1024).toFixed(1)
+    const baseLimit = Number.isFinite(settings.automation?.baseSpeedLimit)
+      ? settings.automation.baseSpeedLimit
+      : settings.globalSpeedLimit
+    document.querySelector('#global-speed-limit').value = baseLimit
+      ? (baseLimit / 1024 / 1024).toFixed(1)
       : 0
+    if (settings.automation) automationSettings = settings.automation
   }
 })
 
@@ -543,7 +622,10 @@ async function showUploadDialog() {
     ? `${uploadFiles.length} dosya seçildi`
     : ''
   document.querySelector('#upload-error').classList.add('hidden')
+  document.querySelector('#upload-schedule').value = ''
+  document.querySelector('#upload-repeat').value = 'none'
   uploadDialog.showModal()
+  void fillTemplateSelect(document.querySelector('#upload-template'), 'upload')
 }
 
 function closeUploadDialog() {
@@ -578,7 +660,9 @@ document.querySelector('#upload-form').addEventListener('submit', async (event) 
         sourcePath, remotePath,
         profileId: document.querySelector('#upload-profile').value,
         conflictPolicy: document.querySelector('#upload-conflict').value,
-        speedLimit: Math.max(Number(document.querySelector('#upload-speed-limit').value) || 0, 0) * 1024 * 1024
+        speedLimit: Math.max(Number(document.querySelector('#upload-speed-limit').value) || 0, 0) * 1024 * 1024,
+        scheduledAt: localInputToIso(document.querySelector('#upload-schedule').value),
+        repeatRule: document.querySelector('#upload-repeat').value
       })
     }
     uploadFiles = []
@@ -592,8 +676,14 @@ document.querySelector('#upload-form').addEventListener('submit', async (event) 
 window.addEventListener('dragover', (event) => event.preventDefault())
 window.addEventListener('drop', async (event) => {
   event.preventDefault()
-  uploadFiles = Array.from(event.dataTransfer.files, (file) => window.internetManager.droppedFilePath(file)).filter(Boolean)
-  if (uploadFiles.length) await showUploadDialog()
+  if (event.dataTransfer.files.length) {
+    uploadFiles = Array.from(event.dataTransfer.files, (file) => window.internetManager.droppedFilePath(file)).filter(Boolean)
+    if (uploadFiles.length) await showUploadDialog()
+    return
+  }
+  const uriList = event.dataTransfer.getData('text/uri-list') || event.dataTransfer.getData('text/plain')
+  const droppedUrls = uriList.split(/\r?\n/).map((line) => line.trim()).filter((line) => line && !line.startsWith('#'))
+  if (droppedUrls.length) openBulkDialog(droppedUrls)
 })
 
 const providerSelect = document.querySelector('#profile-provider')
@@ -809,6 +899,7 @@ function fillSettingsForm() {
   document.querySelector('#setting-close-to-tray').checked = desktopSettings.closeToTray
   document.querySelector('#setting-notifications').checked = desktopSettings.notifications
   document.querySelector('#setting-launch-at-startup').checked = desktopSettings.launchAtStartup
+  document.querySelector('#setting-clipboard-suggest').checked = Boolean(desktopSettings.clipboardSuggest)
   document.querySelector('#setting-theme').value = desktopSettings.theme
   document.querySelector('#setting-language').value = desktopSettings.language
 }
@@ -827,6 +918,7 @@ document.querySelector('#settings-form').addEventListener('submit', async (event
       closeToTray: document.querySelector('#setting-close-to-tray').checked,
       notifications: document.querySelector('#setting-notifications').checked,
       launchAtStartup: document.querySelector('#setting-launch-at-startup').checked,
+      clipboardSuggest: document.querySelector('#setting-clipboard-suggest').checked,
       theme: document.querySelector('#setting-theme').value,
       language: document.querySelector('#setting-language').value
     })
@@ -975,3 +1067,471 @@ window.internetManager.getDesktopSettings().then((settings) => {
   applyTheme(settings.theme)
   applyLanguage()
 })
+
+// ── Bulk add ──────────────────────────────────────────────────────────────
+
+const bulkDialog = document.querySelector('#bulk-dialog')
+const bulkUrlsInput = document.querySelector('#bulk-urls')
+const bulkDestinationInput = document.querySelector('#bulk-destination')
+const bulkConflictPolicy = document.querySelector('#bulk-conflict')
+const bulkSpeedLimit = document.querySelector('#bulk-speed-limit')
+const bulkImportSummary = document.querySelector('#bulk-import-summary')
+const bulkResults = document.querySelector('#bulk-results')
+const bulkList = document.querySelector('#bulk-list')
+const bulkResultSummary = document.querySelector('#bulk-result-summary')
+const bulkStartButton = document.querySelector('#bulk-start-button')
+const bulkErrorBox = document.querySelector('#bulk-error')
+let bulkItems = []
+let bulkInvalidCount = 0
+
+function isUrlAlreadyQueued(url) {
+  for (const transfer of transfers.values()) {
+    if (transfer.direction === 'upload') continue
+    if (transfer.url === url && !['cancelled', 'failed'].includes(transfer.status)) return true
+  }
+  return false
+}
+
+function openBulkDialog(prefillUrls) {
+  bulkErrorBox.classList.add('hidden')
+  bulkResults.classList.add('hidden')
+  bulkStartButton.disabled = true
+  bulkImportSummary.textContent = ''
+  bulkItems = []
+  if (Array.isArray(prefillUrls) && prefillUrls.length) {
+    const existing = bulkUrlsInput.value.trim()
+    const merged = [...new Set([...(existing ? existing.split(/\r?\n/) : []), ...prefillUrls])]
+    bulkUrlsInput.value = merged.join('\n')
+  }
+  if (!bulkDialog.open) bulkDialog.showModal()
+  if (Array.isArray(prefillUrls) && prefillUrls.length) void runBulkScan()
+}
+
+function closeBulkDialog() {
+  bulkDialog.close()
+  bulkUrlsInput.value = ''
+}
+
+document.querySelector('#bulk-add-button').addEventListener('click', () => openBulkDialog())
+document.querySelectorAll('.close-bulk-dialog').forEach((button) => button.addEventListener('click', closeBulkDialog))
+
+document.querySelector('#choose-bulk-destination').addEventListener('click', async () => {
+  const folder = await window.internetManager.chooseDownloadFolder()
+  if (folder) bulkDestinationInput.value = folder
+})
+
+document.querySelector('#bulk-import-file').addEventListener('click', async () => {
+  const result = await window.internetManager.parseBulkFile()
+  if (!result) return
+  const existing = bulkUrlsInput.value.trim()
+  const merged = [...new Set([...(existing ? existing.split(/\r?\n/) : []), ...result.urls])]
+  bulkUrlsInput.value = merged.join('\n')
+  const invalidText = result.invalidLines
+    ? ` · ${result.invalidLines} ${t('invalidLine')}`
+    : ''
+  bulkImportSummary.textContent = `${result.fileName}: ${result.urls.length} ${t('validLinks')}${invalidText}`
+})
+
+function parseBulkTextarea() {
+  const lines = bulkUrlsInput.value.split(/[\r\n]+/).map((line) => line.trim()).filter(Boolean)
+  const unique = [...new Set(lines)]
+  const valid = unique.filter((line) => /^https?:\/\//i.test(line))
+  const invalidCount = unique.length - valid.length
+  return { valid, invalidCount }
+}
+
+async function runBulkScan() {
+  bulkErrorBox.classList.add('hidden')
+  const { valid, invalidCount } = parseBulkTextarea()
+  if (!valid.length) {
+    bulkErrorBox.textContent = t('bulkUrlsLabel') + ' — ' + (desktopSettings.language === 'en' ? 'add at least one valid link.' : 'en az bir geçerli bağlantı ekleyin.')
+    bulkErrorBox.classList.remove('hidden')
+    return
+  }
+  const scanButton = document.querySelector('#bulk-scan-button')
+  scanButton.disabled = true
+  try {
+    const response = await window.internetManager.probeUrls(valid)
+    const probed = Array.isArray(response?.items) ? response.items : []
+    bulkItems = probed.map((item) => ({
+      ...item,
+      duplicate: isUrlAlreadyQueued(item.url),
+      selected: !isUrlAlreadyQueued(item.url)
+    }))
+    bulkInvalidCount = invalidCount
+    renderBulkResults(invalidCount)
+  } catch (error) {
+    bulkErrorBox.textContent = error.message || (desktopSettings.language === 'en' ? 'Could not scan links.' : 'Bağlantılar taranamadı.')
+    bulkErrorBox.classList.remove('hidden')
+  } finally {
+    scanButton.disabled = false
+  }
+}
+
+document.querySelector('#bulk-scan-button').addEventListener('click', () => void runBulkScan())
+
+function renderBulkResults(invalidCount) {
+  bulkList.replaceChildren()
+  for (const [index, item] of bulkItems.entries()) {
+    const row = document.createElement('label')
+    row.className = `bulk-row${item.duplicate ? ' duplicate' : ''}`
+    const checkbox = document.createElement('input')
+    checkbox.type = 'checkbox'
+    checkbox.checked = item.selected
+    checkbox.dataset.index = index
+    checkbox.addEventListener('change', () => {
+      bulkItems[index].selected = checkbox.checked
+      updateBulkStartButton()
+    })
+    const details = document.createElement('div')
+    const name = document.createElement('b')
+    name.textContent = item.filename
+    const meta = document.createElement('span')
+    meta.textContent = item.duplicate
+      ? t('duplicateInQueue')
+      : `${item.category || ''} · ${item.size ? formatBytes(item.size) : (desktopSettings.language === 'en' ? 'size unknown' : 'boyut bilinmiyor')}`
+    details.append(name, meta)
+    row.append(checkbox, details)
+    bulkList.append(row)
+  }
+  const invalidText = invalidCount ? ` · ${invalidCount} ${t('invalidLine')}` : ''
+  bulkResultSummary.textContent = `${bulkItems.length} ${t('validLinks')}${invalidText}`
+  bulkResults.classList.remove('hidden')
+  updateBulkStartButton()
+}
+
+function updateBulkStartButton() {
+  bulkStartButton.disabled = !bulkDestinationInput.value || !bulkItems.some((item) => item.selected)
+}
+
+bulkDestinationInput.addEventListener('change', updateBulkStartButton)
+
+document.querySelector('#bulk-toggle-all').addEventListener('click', () => {
+  const shouldSelect = bulkItems.some((item) => !item.selected)
+  bulkItems = bulkItems.map((item) => ({ ...item, selected: shouldSelect }))
+  renderBulkResults(bulkInvalidCount)
+})
+
+bulkStartButton.addEventListener('click', async () => {
+  const selected = bulkItems.filter((item) => item.selected)
+  if (!selected.length || !bulkDestinationInput.value) return
+  bulkStartButton.disabled = true
+  try {
+    const results = await window.internetManager.bulkStartDownloads({
+      folder: bulkDestinationInput.value,
+      conflictPolicy: bulkConflictPolicy.value,
+      speedLimit: Math.max(Number(bulkSpeedLimit.value) || 0, 0) * 1024 * 1024,
+      items: selected.map((item) => ({ url: item.url, filename: item.filename }))
+    })
+    let started = 0
+    for (const result of results) {
+      if (result.ok && result.transferId) {
+        started += 1
+        ensureTransfer({
+          transferId: result.transferId,
+          url: result.url,
+          destination: result.destination,
+          status: 'waiting',
+          downloadedBytes: 0,
+          totalBytes: null
+        })
+      }
+    }
+    showToast(desktopSettings.language === 'en' ? `${started} download(s) added.` : `${started} indirme eklendi.`)
+    closeBulkDialog()
+  } catch (error) {
+    bulkErrorBox.textContent = error.message || (desktopSettings.language === 'en' ? 'Could not start downloads.' : 'İndirmeler başlatılamadı.')
+    bulkErrorBox.classList.remove('hidden')
+  } finally {
+    updateBulkStartButton()
+  }
+})
+
+// ── Task templates ───────────────────────────────────────────────────────
+
+async function fillTemplateSelect(selectEl, kind) {
+  const templates = await window.internetManager.listTemplates()
+  const filtered = templates.filter((template) => template.kind === kind)
+  selectEl.replaceChildren()
+  const emptyOption = document.createElement('option')
+  emptyOption.value = ''
+  emptyOption.textContent = t('noTemplate')
+  selectEl.append(emptyOption)
+  for (const template of filtered) {
+    const option = document.createElement('option')
+    option.value = template.id
+    option.textContent = template.name
+    selectEl.append(option)
+  }
+  return filtered
+}
+
+const downloadTemplateSelect = document.querySelector('#download-template')
+downloadTemplateSelect.addEventListener('change', async () => {
+  if (!downloadTemplateSelect.value) return
+  const templates = await window.internetManager.listTemplates()
+  const template = templates.find((item) => item.id === downloadTemplateSelect.value)
+  if (!template) return
+  if (template.destination) destinationInput.value = template.destination
+  conflictPolicy.value = template.conflictPolicy
+  taskSpeedLimit.value = template.speedLimit ? (template.speedLimit / (1024 * 1024)).toString() : '0'
+})
+
+document.querySelector('#save-download-template').addEventListener('click', async () => {
+  const nameInput = document.querySelector('#download-template-name')
+  if (!nameInput.value.trim()) { nameInput.focus(); return }
+  await window.internetManager.saveTemplate({
+    name: nameInput.value.trim(),
+    kind: 'download',
+    destination: destinationInput.value,
+    conflictPolicy: conflictPolicy.value,
+    speedLimit: Math.max(Number(taskSpeedLimit.value) || 0, 0) * 1024 * 1024
+  })
+  nameInput.value = ''
+  await fillTemplateSelect(downloadTemplateSelect, 'download')
+  showToast(desktopSettings.language === 'en' ? 'Template saved.' : 'Şablon kaydedildi.')
+})
+
+document.querySelector('#delete-download-template').addEventListener('click', async () => {
+  if (!downloadTemplateSelect.value) return
+  await window.internetManager.deleteTemplate(downloadTemplateSelect.value)
+  await fillTemplateSelect(downloadTemplateSelect, 'download')
+})
+
+const uploadTemplateSelect = document.querySelector('#upload-template')
+uploadTemplateSelect.addEventListener('change', async () => {
+  if (!uploadTemplateSelect.value) return
+  const templates = await window.internetManager.listTemplates()
+  const template = templates.find((item) => item.id === uploadTemplateSelect.value)
+  if (!template) return
+  if (template.profileId) document.querySelector('#upload-profile').value = template.profileId
+  if (template.remotePath) document.querySelector('#remote-path').value = template.remotePath
+  document.querySelector('#upload-conflict').value = template.conflictPolicy
+  document.querySelector('#upload-speed-limit').value = template.speedLimit ? (template.speedLimit / (1024 * 1024)).toString() : '0'
+  updateUploadCapabilities()
+})
+
+document.querySelector('#save-upload-template').addEventListener('click', async () => {
+  const nameInput = document.querySelector('#upload-template-name')
+  if (!nameInput.value.trim()) { nameInput.focus(); return }
+  await window.internetManager.saveTemplate({
+    name: nameInput.value.trim(),
+    kind: 'upload',
+    profileId: document.querySelector('#upload-profile').value,
+    remotePath: document.querySelector('#remote-path').value,
+    conflictPolicy: document.querySelector('#upload-conflict').value,
+    speedLimit: Math.max(Number(document.querySelector('#upload-speed-limit').value) || 0, 0) * 1024 * 1024
+  })
+  nameInput.value = ''
+  await fillTemplateSelect(uploadTemplateSelect, 'upload')
+  showToast(desktopSettings.language === 'en' ? 'Template saved.' : 'Şablon kaydedildi.')
+})
+
+document.querySelector('#delete-upload-template').addEventListener('click', async () => {
+  if (!uploadTemplateSelect.value) return
+  await window.internetManager.deleteTemplate(uploadTemplateSelect.value)
+  await fillTemplateSelect(uploadTemplateSelect, 'upload')
+})
+
+// ── Clipboard suggestion & quick add (CLI / protocol) ──────────────────────
+
+const clipboardBanner = document.querySelector('#clipboard-banner')
+const clipboardBannerText = document.querySelector('#clipboard-banner-text')
+let clipboardSuggestedUrl = ''
+
+window.internetManager.onClipboardSuggestion((url) => {
+  if (isUrlAlreadyQueued(url)) return
+  clipboardSuggestedUrl = url
+  clipboardBannerText.textContent = `${t('clipboardFoundLink')}: ${url}`
+  clipboardBanner.classList.remove('hidden')
+})
+
+document.querySelector('#clipboard-banner-add').addEventListener('click', () => {
+  clipboardBanner.classList.add('hidden')
+  if (clipboardSuggestedUrl) openBulkDialog([clipboardSuggestedUrl])
+})
+
+document.querySelector('#clipboard-banner-dismiss').addEventListener('click', () => {
+  clipboardBanner.classList.add('hidden')
+})
+
+window.internetManager.onQuickAddUrls((urls) => {
+  if (Array.isArray(urls) && urls.length) openBulkDialog(urls)
+})
+
+window.internetManager.onQuickAddFiles(async (paths) => {
+  if (!Array.isArray(paths) || !paths.length) return
+  uploadFiles = paths
+  await showUploadDialog()
+})
+
+// ── Scheduling & automation ───────────────────────────────────────────────
+
+const ICON_X = icon('<path d="M18 6 6 18"/><path d="M6 6l12 12"/>', 13)
+const automationDialog = document.querySelector('#automation-dialog')
+
+function localInputToIso(value) {
+  if (!value) return null
+  const moment = new Date(value)
+  return Number.isNaN(moment.getTime()) ? null : moment.toISOString()
+}
+
+async function startScheduledNow(transfer) {
+  try {
+    await window.internetManager.scheduleTransfer(transfer.transferId, null, 'none')
+    transfer.status = 'paused'
+    await performAction(transfer, 'resume')
+  } catch (error) {
+    showToast(error.message || (desktopSettings.language === 'en' ? 'Could not update the schedule.' : 'Zamanlama güncellenemedi.'))
+  }
+}
+
+function renderSpeedWindows() {
+  const list = document.querySelector('#speed-window-list')
+  list.replaceChildren()
+  if (!speedWindowDraft.length) {
+    const empty = document.createElement('p')
+    empty.className = 'speed-window-empty'
+    empty.textContent = t('noSpeedWindow')
+    list.append(empty)
+    return
+  }
+  for (const [index, window_] of speedWindowDraft.entries()) {
+    const row = document.createElement('div')
+    row.className = 'speed-window-row'
+
+    const start = document.createElement('input')
+    start.type = 'time'
+    start.value = window_.start
+    start.addEventListener('change', () => { speedWindowDraft[index].start = start.value })
+
+    const end = document.createElement('input')
+    end.type = 'time'
+    end.value = window_.end
+    end.addEventListener('change', () => { speedWindowDraft[index].end = end.value })
+
+    const limitWrap = document.createElement('div')
+    limitWrap.className = 'unit-input'
+    const limit = document.createElement('input')
+    limit.type = 'number'
+    limit.min = '0'
+    limit.step = '0.1'
+    limit.value = window_.limit ? (window_.limit / 1024 / 1024).toFixed(1) : '0'
+    limit.addEventListener('change', () => {
+      speedWindowDraft[index].limit = Math.max(Number(limit.value) || 0, 0) * 1024 * 1024
+    })
+    const unit = document.createElement('span')
+    unit.textContent = t('unitMbps')
+    limitWrap.append(limit, unit)
+
+    const remove = iconButton(ICON_X, t('removeWindow'), () => {
+      speedWindowDraft.splice(index, 1)
+      renderSpeedWindows()
+    }, '')
+
+    row.append(start, end, limitWrap, remove)
+    list.append(row)
+  }
+}
+
+async function showAutomationDialog() {
+  try {
+    automationSettings = await window.internetManager.getAutomation()
+  } catch {
+    // motor yanıt vermezse son bilinen ayarlarla devam et
+  }
+  speedWindowDraft = (automationSettings.speedWindows || []).map((item) => ({ ...item }))
+  renderSpeedWindows()
+  document.querySelector('#missed-policy').value = automationSettings.missedPolicy || 'run'
+  document.querySelector('#completion-action').value = desktopSettings.completionAction || 'none'
+  document.querySelector('#automation-error').classList.add('hidden')
+  if (!automationDialog.open) automationDialog.showModal()
+}
+
+document.querySelector('#automation-button').addEventListener('click', () => void showAutomationDialog())
+document.querySelectorAll('.close-automation-dialog').forEach((button) => button.addEventListener('click', () => automationDialog.close()))
+document.querySelector('#add-speed-window').addEventListener('click', () => {
+  speedWindowDraft.push({ start: '23:00', end: '07:00', limit: 0 })
+  renderSpeedWindows()
+})
+
+document.querySelector('#automation-form').addEventListener('submit', async (event) => {
+  event.preventDefault()
+  const errorBox = document.querySelector('#automation-error')
+  errorBox.classList.add('hidden')
+  const invalid = speedWindowDraft.find((item) => !item.start || !item.end || item.start === item.end)
+  if (invalid) {
+    errorBox.textContent = desktopSettings.language === 'en'
+      ? 'Each range needs a start and an end, and they cannot be identical.'
+      : 'Her aralığın başlangıcı ve bitişi olmalı, ikisi aynı olamaz.'
+    errorBox.classList.remove('hidden')
+    return
+  }
+  try {
+    automationSettings = await window.internetManager.updateAutomation({
+      speedWindows: speedWindowDraft,
+      missedPolicy: document.querySelector('#missed-policy').value
+    })
+    desktopSettings = await window.internetManager.updateDesktopSettings({
+      ...desktopSettings,
+      completionAction: document.querySelector('#completion-action').value
+    })
+    automationDialog.close()
+    showToast(desktopSettings.language === 'en' ? 'Automation settings saved.' : 'Otomasyon ayarları kaydedildi.')
+  } catch (error) {
+    errorBox.textContent = error.message || (desktopSettings.language === 'en' ? 'Could not save settings.' : 'Ayarlar kaydedilemedi.')
+    errorBox.classList.remove('hidden')
+  }
+})
+
+function checkCompletionAutomation() {
+  const action = desktopSettings.completionAction
+  if (!action || action === 'none' || countdownTimer) return
+  const list = [...transfers.values()]
+  if (!list.length) return
+  const busy = list.some((transfer) => ['waiting', 'downloading', 'uploading', 'retrying', 'pausing', 'scheduled'].includes(transfer.status))
+  if (busy) {
+    completionArmed = true
+    return
+  }
+  const finished = list.some((transfer) => ['completed', 'skipped'].includes(transfer.status))
+  if (!finished || !completionArmed) return
+  completionArmed = false
+  startCountdown(action)
+}
+
+function startCountdown(action) {
+  const overlay = document.querySelector('#countdown-overlay')
+  const value = document.querySelector('#countdown-value')
+  const titles = { quit: 'countdownQuit', sleep: 'countdownSleep', shutdown: 'countdownShutdown' }
+  document.querySelector('#countdown-title').textContent = t(titles[action])
+  let remaining = 30
+  value.textContent = String(remaining)
+  overlay.classList.remove('hidden')
+  countdownTimer = setInterval(async () => {
+    remaining -= 1
+    value.textContent = String(Math.max(remaining, 0))
+    if (remaining > 0) return
+    stopCountdown()
+    try {
+      await window.internetManager.runSystemAction(action)
+    } catch (error) {
+      showToast(error.message || (desktopSettings.language === 'en' ? 'System action failed.' : 'Sistem eylemi çalıştırılamadı.'))
+    }
+  }, 1000)
+}
+
+function stopCountdown() {
+  clearInterval(countdownTimer)
+  countdownTimer = null
+  document.querySelector('#countdown-overlay').classList.add('hidden')
+}
+
+document.querySelector('#countdown-cancel').addEventListener('click', stopCountdown)
+
+function reportNetworkStatus() {
+  void window.internetManager.reportNetworkStatus(navigator.onLine).catch(() => {})
+}
+
+window.addEventListener('online', reportNetworkStatus)
+window.addEventListener('offline', reportNetworkStatus)

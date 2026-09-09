@@ -43,6 +43,8 @@ class TransferStore:
                 remote_path TEXT,
                 provider TEXT,
                 profile_id TEXT,
+                scheduled_at TEXT,
+                repeat_rule TEXT NOT NULL DEFAULT 'none',
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );
@@ -78,6 +80,8 @@ class TransferStore:
             "remote_path": "TEXT",
             "provider": "TEXT",
             "profile_id": "TEXT",
+            "scheduled_at": "TEXT",
+            "repeat_rule": "TEXT NOT NULL DEFAULT 'none'",
         }.items():
             if name not in columns:
                 self.connection.execute(f"ALTER TABLE transfers ADD COLUMN {name} {definition}")
@@ -85,18 +89,21 @@ class TransferStore:
 
     def create(self, transfer: dict[str, Any]) -> None:
         timestamp = now_iso()
+        scheduled_at = transfer.get("scheduled_at")
         self.connection.execute(
             """
             INSERT INTO transfers (
                 id, url, destination, partial_path, conflict_policy, status,
                 total_bytes, downloaded_bytes, retry_count, max_retries, priority, speed_limit,
-                created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, 'waiting', NULL, 0, 0, 3, ?, ?, ?, ?)
+                scheduled_at, repeat_rule, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, NULL, 0, 0, 3, ?, ?, ?, ?, ?, ?)
             """,
             (
                 transfer["id"], transfer["url"], transfer["destination"],
                 transfer["partial_path"], transfer["conflict_policy"],
-                transfer.get("priority", 0), transfer.get("speed_limit", 0), timestamp, timestamp,
+                "scheduled" if scheduled_at else "waiting",
+                transfer.get("priority", 0), transfer.get("speed_limit", 0),
+                scheduled_at, transfer.get("repeat_rule", "none"), timestamp, timestamp,
             ),
         )
         self.connection.commit()
@@ -115,15 +122,17 @@ class TransferStore:
                 id, url, destination, partial_path, conflict_policy, status,
                 total_bytes, downloaded_bytes, retry_count, max_retries,
                 priority, speed_limit, direction, source_path, remote_path,
-                provider, profile_id, created_at, updated_at
-            ) VALUES (?, '', ?, '', ?, 'waiting', ?, 0, 0, 3, ?, ?,
-                      'upload', ?, ?, ?, ?, ?, ?)
+                provider, profile_id, scheduled_at, repeat_rule, created_at, updated_at
+            ) VALUES (?, '', ?, '', ?, ?, ?, 0, 0, 3, ?, ?,
+                      'upload', ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 transfer["id"], transfer["remote_path"], transfer["conflict_policy"],
+                "scheduled" if transfer.get("scheduled_at") else "waiting",
                 transfer["total_bytes"], transfer.get("priority", 0),
                 transfer.get("speed_limit", 0), transfer["source_path"],
                 transfer["remote_path"], transfer["provider"], transfer["profile_id"],
+                transfer.get("scheduled_at"), transfer.get("repeat_rule", "none"),
                 timestamp, timestamp,
             ),
         )
@@ -140,6 +149,7 @@ class TransferStore:
             "destination", "partial_path", "status", "total_bytes",
             "downloaded_bytes", "etag", "last_modified", "supports_ranges",
             "retry_count", "error", "priority", "speed_limit",
+            "scheduled_at", "repeat_rule",
         }
         values = {key: value for key, value in fields.items() if key in allowed}
         if not values:
@@ -235,4 +245,6 @@ def public_transfer(record: dict[str, Any]) -> dict[str, Any]:
         "remotePath": record["remote_path"],
         "provider": record["provider"],
         "profileId": record["profile_id"],
+        "scheduledAt": record["scheduled_at"],
+        "repeatRule": record["repeat_rule"],
     }
