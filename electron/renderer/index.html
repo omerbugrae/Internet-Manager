@@ -18,17 +18,36 @@
 
       <aside class="sidebar">
         <button class="new-transfer" id="new-download-button" type="button">
-          <span aria-hidden="true">＋</span> <span data-i18n="newDownload">Yeni indirme</span>
+          <svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+          <span data-i18n="newDownload">Yeni indirme</span>
         </button>
-        <button class="new-upload" id="new-upload-button" type="button"><span>↑</span> <span data-i18n="newUpload">Yeni yükleme</span></button>
+        <button class="new-upload" id="new-upload-button" type="button">
+          <svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>
+          <span data-i18n="newUpload">Yeni yükleme</span>
+        </button>
         <nav data-i18n-aria="transferFilters" aria-label="Transfer filtreleri">
-          <button class="nav-item active" data-filter="all" type="button"><span>↕</span> <span data-i18n="allTransfers">Tüm transferler</span></button>
-          <button class="nav-item" data-filter="download" type="button"><span>↓</span> <span data-i18n="downloads">İndirilenler</span></button>
-          <button class="nav-item" data-filter="upload" type="button"><span>↑</span> <span data-i18n="uploads">Yüklenenler</span></button>
+          <button class="nav-item active" data-filter="all" type="button">
+            <svg class="ic" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg>
+            <span data-i18n="allTransfers">Tüm transferler</span>
+          </button>
+          <button class="nav-item" data-filter="download" type="button">
+            <svg class="ic" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="M19 12l-7 7-7-7"/></svg>
+            <span data-i18n="downloads">İndirilenler</span>
+          </button>
+          <button class="nav-item" data-filter="upload" type="button">
+            <svg class="ic" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>
+            <span data-i18n="uploads">Yüklenenler</span>
+          </button>
         </nav>
         <div class="sidebar-tools">
-          <button class="nav-item" id="activity-button" type="button"><span>≡</span> <span data-i18n="activity">Aktivite</span><small>Ctrl L</small></button>
-          <button class="nav-item" id="settings-button" type="button"><span>⚙</span> <span data-i18n="settings">Ayarlar</span><small>Ctrl ,</small></button>
+          <button class="nav-item" id="activity-button" type="button">
+            <svg class="ic" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+            <span data-i18n="activity">Aktivite</span><small>Ctrl L</small>
+          </button>
+          <button class="nav-item" id="settings-button" type="button">
+            <svg class="ic" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>
+            <span data-i18n="settings">Ayarlar</span><small>Ctrl ,</small>
+          </button>
         </div>
         <div class="engine-status" id="engine-status"><span></span><b data-i18n="engineWaiting">Motor bekleniyor</b></div>
         <p class="sidebar-note" data-i18n="sidebarNote">Bağlantıyı bırak.<br />Rotayı biz yönetelim.</p>
@@ -38,7 +57,7 @@
         <section class="workspace-header">
           <div>
             <p class="eyebrow" data-i18n="liveDesk">CANLI TRANSFER MASASI</p>
-            <h1><span data-i18n="heroLine1">Akış burada.</span><br /><em data-i18n="heroLine2">Kontrol sende.</em></h1>
+            <h1 data-i18n="heroLine1">Transferler</h1>
           </div>
           <div class="summary"><span class="live-dot"></span><b id="active-count">0</b><span data-i18n="activeTransfer">aktif transfer</span></div>
         </section>
@@ -58,16 +77,12 @@
         </section>
 
         <section class="transfer-board" aria-live="polite">
-          <div class="transfer-rail" aria-hidden="true">
-            <span class="rail-node">↓</span><i></i><span class="rail-node upload">↑</span>
-          </div>
-
           <div class="empty-state" id="empty-state">
-            <div class="empty-orbit" aria-hidden="true"><i>↓</i><span></span><i>↑</i></div>
+            <div class="empty-glyph" aria-hidden="true"><svg class="ic" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg></div>
             <p class="section-label" data-i18n="queueEmpty">KUYRUK BOŞ</p>
             <h2 data-i18n="emptyTitle">İlk rotayı oluştur.</h2>
             <p data-i18n="emptyBody">Bir bağlantı ekle veya dosyayı pencereye bırak. Kuyruk, hız ve hedef tek masadan yönetilsin.</p>
-            <button class="primary-action" id="empty-download-button" type="button"><span data-i18n="newRoute">Yeni rota</span> <span>↗</span></button>
+            <button class="primary-action" id="empty-download-button" type="button"><span data-i18n="newRoute">Yeni rota</span> <svg class="ic" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7"/><path d="M7 7h10v10"/></svg></button>
           </div>
 
           <div class="transfer-list hidden" id="transfer-list"></div>
@@ -79,7 +94,7 @@
       <form id="download-form" novalidate>
         <div class="dialog-heading">
           <p class="eyebrow" data-i18n="newDownloadEyebrow">YENİ İNDİRME</p>
-          <button class="icon-button close-dialog" data-i18n-aria="closeWindow" aria-label="Pencereyi kapat" type="button">×</button>
+          <button class="icon-button close-dialog" data-i18n-aria="closeWindow" aria-label="Pencereyi kapat" type="button"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg></button>
         </div>
         <h2 data-i18n="downloadHeading">Bağlantıyı nereye indirelim?</h2>
         <label for="download-url" data-i18n="fileLink">Dosya bağlantısı</label>
@@ -107,7 +122,7 @@
 
     <dialog id="upload-dialog">
       <form id="upload-form" novalidate>
-        <div class="dialog-heading"><p class="eyebrow" data-i18n="newUploadEyebrow">YENİ YÜKLEME</p><button class="icon-button close-upload-dialog" data-i18n-aria="closeWindow" aria-label="Pencereyi kapat" type="button">×</button></div>
+        <div class="dialog-heading"><p class="eyebrow" data-i18n="newUploadEyebrow">YENİ YÜKLEME</p><button class="icon-button close-upload-dialog" data-i18n-aria="closeWindow" aria-label="Pencereyi kapat" type="button"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg></button></div>
         <h2 data-i18n="uploadHeading">Dosyaları hedefe gönder.</h2>
         <label data-i18n="localFiles">Yerel dosyalar</label>
         <div class="path-picker"><input id="upload-files" readonly data-i18n-placeholder="noFileChosen" placeholder="Dosya seçilmedi" /><button id="choose-upload-files" type="button" data-i18n="choose">Seç</button></div>
@@ -127,7 +142,7 @@
 
     <dialog id="profile-dialog">
       <form id="profile-form" novalidate>
-        <div class="dialog-heading"><p class="eyebrow" data-i18n="connectionProfileEyebrow">BAĞLANTI PROFİLİ</p><button class="icon-button close-profile-dialog" data-i18n-aria="closeWindow" aria-label="Pencereyi kapat" type="button">×</button></div>
+        <div class="dialog-heading"><p class="eyebrow" data-i18n="connectionProfileEyebrow">BAĞLANTI PROFİLİ</p><button class="icon-button close-profile-dialog" data-i18n-aria="closeWindow" aria-label="Pencereyi kapat" type="button"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg></button></div>
         <h2 data-i18n="newTarget">Yeni hedef ekle.</h2>
         <label for="profile-name" data-i18n="profileName">Profil adı</label><input id="profile-name" placeholder="Sunucum" />
         <label for="profile-provider" data-i18n="protocol">Protokol</label><select id="profile-provider"><option value="sftp">SFTP</option><option value="webdav">WebDAV</option><option value="s3" data-i18n="s3Compatible">S3 uyumlu</option></select>
@@ -150,9 +165,9 @@
 
     <dialog id="remote-dialog">
       <div class="remote-browser">
-        <div class="dialog-heading"><p class="eyebrow" data-i18n="remoteTargetEyebrow">UZAK HEDEF</p><button class="icon-button" id="close-remote-dialog" data-i18n-aria="closeWindow" aria-label="Pencereyi kapat" type="button">×</button></div>
+        <div class="dialog-heading"><p class="eyebrow" data-i18n="remoteTargetEyebrow">UZAK HEDEF</p><button class="icon-button" id="close-remote-dialog" data-i18n-aria="closeWindow" aria-label="Pencereyi kapat" type="button"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg></button></div>
         <h2 data-i18n="addFolderToRoute">Klasörü rotaya ekle.</h2>
-        <div class="remote-route"><button id="remote-up" type="button" data-i18n-aria="parentFolder" aria-label="Üst klasör">←</button><code id="remote-current-path">/</code></div>
+        <div class="remote-route"><button id="remote-up" type="button" data-i18n-aria="parentFolder" aria-label="Üst klasör"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg></button><code id="remote-current-path">/</code></div>
         <p class="form-error hidden" id="remote-error" role="alert"></p>
         <div class="remote-list" id="remote-list"><p class="remote-empty" data-i18n="foldersLoading">Klasörler getiriliyor…</p></div>
         <div class="dialog-actions"><button class="text-button" id="cancel-remote" type="button" data-i18n="discard">Vazgeç</button><button class="upload-action" id="select-remote" type="button" data-i18n="selectThisFolder">Bu klasörü seç</button></div>
@@ -161,7 +176,7 @@
 
     <dialog id="settings-dialog">
       <form id="settings-form">
-        <div class="dialog-heading"><p class="eyebrow" data-i18n="desktopSettings">MASAÜSTÜ AYARLARI</p><button class="icon-button close-settings-dialog" data-i18n-aria="closeWindow" aria-label="Pencereyi kapat" type="button">×</button></div>
+        <div class="dialog-heading"><p class="eyebrow" data-i18n="desktopSettings">MASAÜSTÜ AYARLARI</p><button class="icon-button close-settings-dialog" data-i18n-aria="closeWindow" aria-label="Pencereyi kapat" type="button"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg></button></div>
         <h2 data-i18n="settingsTitle">Uygulama sana ayak uydursun.</h2>
         <div class="setting-row"><div><b data-i18n="closeToTray">Kapatınca arka planda çalış</b><small data-i18n="closeToTrayHelp">Pencere kapanır, transferler sistem tepsisinde sürer.</small></div><input id="setting-close-to-tray" type="checkbox" /></div>
         <div class="setting-row"><div><b data-i18n="notifications">Bildirimler</b><small data-i18n="notificationsHelp">Tamamlanan ve başarısız transferleri bildir.</small></div><input id="setting-notifications" type="checkbox" /></div>
@@ -174,7 +189,7 @@
 
     <dialog id="activity-dialog" class="wide-dialog">
       <div class="activity-panel">
-        <div class="dialog-heading"><p class="eyebrow" data-i18n="activityLog">AKTİVİTE GÜNLÜĞÜ</p><button class="icon-button close-activity-dialog" data-i18n-aria="closeWindow" aria-label="Pencereyi kapat" type="button">×</button></div>
+        <div class="dialog-heading"><p class="eyebrow" data-i18n="activityLog">AKTİVİTE GÜNLÜĞÜ</p><button class="icon-button close-activity-dialog" data-i18n-aria="closeWindow" aria-label="Pencereyi kapat" type="button"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg></button></div>
         <div class="activity-heading"><h2 data-i18n="activityTitle">Hattın yakın geçmişi.</h2><div><select id="activity-filter" data-i18n-aria="activityFilter" aria-label="Aktivite filtresi"><option value="all" data-i18n="all">Tümü</option><option value="download" data-i18n="downloads">İndirilenler</option><option value="upload" data-i18n="uploads">Yüklenenler</option><option value="error" data-i18n="errors">Hatalar</option></select><button id="clear-activity" type="button" data-i18n="clear">Temizle</button></div></div>
         <div class="activity-list" id="activity-list"></div>
       </div>
@@ -182,7 +197,7 @@
 
     <dialog id="details-dialog">
       <div class="details-panel">
-        <div class="dialog-heading"><p class="eyebrow" data-i18n="transferDetails">TRANSFER AYRINTILARI</p><button class="icon-button close-details-dialog" data-i18n-aria="closeWindow" aria-label="Pencereyi kapat" type="button">×</button></div>
+        <div class="dialog-heading"><p class="eyebrow" data-i18n="transferDetails">TRANSFER AYRINTILARI</p><button class="icon-button close-details-dialog" data-i18n-aria="closeWindow" aria-label="Pencereyi kapat" type="button"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg></button></div>
         <h2 id="details-title">—</h2>
         <dl class="details-grid" id="details-grid"></dl>
         <div class="details-error hidden" id="details-error"></div>

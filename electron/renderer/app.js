@@ -1,3 +1,14 @@
+function icon(paths, size = 16) {
+  return `<svg class="ic" viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`
+}
+const ICON_ARROW_DOWN = icon('<path d="M12 5v14"/><path d="M19 12l-7 7-7-7"/>', 17)
+const ICON_ARROW_UP = icon('<path d="M12 19V5"/><path d="M5 12l7-7 7 7"/>', 17)
+const ICON_CHEVRON_UP = icon('<path d="M18 15l-6-6-6 6"/>', 11)
+const ICON_CHEVRON_DOWN = icon('<path d="M6 9l6 6 6-6"/>', 11)
+const ICON_FOLDER = icon('<path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/>', 15)
+const ICON_FILE = icon('<path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/>', 15)
+const ICON_CHEVRON_RIGHT = icon('<path d="M9 6l6 6-6 6"/>', 13)
+
 const dialog = document.querySelector('#download-dialog')
 const form = document.querySelector('#download-form')
 const urlInput = document.querySelector('#download-url')
@@ -36,7 +47,7 @@ const translations = {
     shortcuts: 'Kısayollar', smartCapture: 'Akıllı yakalama', cancel: 'Vazgeç', saveSettings: 'Ayarları kaydet', activityLog: 'AKTİVİTE GÜNLÜĞÜ',
     activityTitle: 'Hattın yakın geçmişi.', all: 'Tümü', errors: 'Hatalar', clear: 'Temizle', transferDetails: 'TRANSFER AYRINTILARI', openFolder: 'Klasörü aç', openFile: 'Dosyayı aç',
     engineWaiting: 'Motor bekleniyor', engineReady: 'Motor hazır', engineError: 'Motor hatası', sidebarNote: 'Bağlantıyı bırak.\nRotayı biz yönetelim.',
-    liveDesk: 'CANLI TRANSFER MASASI', heroLine1: 'Akış burada.', heroLine2: 'Kontrol sende.', activeTransfer: 'aktif transfer',
+    liveDesk: 'CANLI TRANSFER MASASI', heroLine1: 'Transferler', activeTransfer: 'aktif transfer',
     selectAll: 'Tümünü seç', pause: 'Duraklat', resume: 'Devam et', reconnect: 'Yeniden bağlan', retry: 'Yeniden dene', copyAddress: 'Adresi kopyala',
     cancelAction: 'İptal', concurrent: 'Eşzamanlı', globalLimit: 'Genel limit', unitMbps: 'MB/sn', apply: 'Uygula', details: 'Ayrıntılar',
     queueEmpty: 'KUYRUK BOŞ', emptyTitle: 'İlk rotayı oluştur.', emptyBody: 'Bir bağlantı ekle veya dosyayı pencereye bırak. Kuyruk, hız ve hedef tek masadan yönetilsin.', newRoute: 'Yeni rota',
@@ -65,7 +76,7 @@ const translations = {
     shortcuts: 'Shortcuts', smartCapture: 'Smart capture', cancel: 'Cancel', saveSettings: 'Save settings', activityLog: 'ACTIVITY LOG',
     activityTitle: 'The line’s recent history.', all: 'All', errors: 'Errors', clear: 'Clear', transferDetails: 'TRANSFER DETAILS', openFolder: 'Open folder', openFile: 'Open file',
     engineWaiting: 'Engine starting', engineReady: 'Engine ready', engineError: 'Engine error', sidebarNote: 'Let go of the connection.\nWe’ll manage the route.',
-    liveDesk: 'LIVE TRANSFER DESK', heroLine1: 'The flow is here.', heroLine2: 'You’re in control.', activeTransfer: 'active transfer',
+    liveDesk: 'LIVE TRANSFER DESK', heroLine1: 'Transfers', activeTransfer: 'active transfer',
     selectAll: 'Select all', pause: 'Pause', resume: 'Resume', reconnect: 'Reconnect', retry: 'Retry', copyAddress: 'Copy address',
     cancelAction: 'Cancel', concurrent: 'Concurrent', globalLimit: 'Global limit', unitMbps: 'MB/s', apply: 'Apply', details: 'Details',
     queueEmpty: 'QUEUE EMPTY', emptyTitle: 'Start your first route.', emptyBody: 'Add a link or drop a file onto the window. Queue, speed, and destination — one desk.', newRoute: 'New route',
@@ -184,7 +195,7 @@ function ensureTransfer(record) {
   card.dataset.transferId = record.transferId
   card.innerHTML = `
     <input class="transfer-select" type="checkbox" aria-label="${t('selectTransfer')}" />
-    <div class="file-glyph" aria-hidden="true">${record.direction === 'upload' ? '↑' : '↓'}</div>
+    <div class="file-glyph" aria-hidden="true">${record.direction === 'upload' ? ICON_ARROW_UP : ICON_ARROW_DOWN}</div>
     <div class="transfer-info">
       <p class="transfer-title"></p>
       <div class="transfer-meta"><span class="status"></span><span class="mode-badge"></span><span class="size"></span><span class="speed">—</span><span class="remaining">—</span></div>
@@ -240,8 +251,8 @@ function renderActions(transfer) {
   if (transfer.status === 'waiting') {
     const priority = document.createElement('div')
     priority.className = 'priority-controls'
-    priority.append(actionButton('▲', () => changePriority(transfer, 1), 'priority-button'))
-    priority.append(actionButton('▼', () => changePriority(transfer, -1), 'priority-button'))
+    priority.append(iconButton(ICON_CHEVRON_UP, desktopSettings.language === 'en' ? 'Raise priority' : 'Önceliği artır', () => changePriority(transfer, 1), 'priority-button'))
+    priority.append(iconButton(ICON_CHEVRON_DOWN, desktopSettings.language === 'en' ? 'Lower priority' : 'Önceliği azalt', () => changePriority(transfer, -1), 'priority-button'))
     container.append(priority)
   }
   if (['waiting', 'downloading', 'uploading', 'retrying'].includes(transfer.status)) {
@@ -270,6 +281,16 @@ function actionButton(label, handler, className = 'action-button') {
   button.className = className
   button.type = 'button'
   button.textContent = label
+  button.addEventListener('click', handler)
+  return button
+}
+
+function iconButton(iconHtml, ariaLabel, handler, className) {
+  const button = document.createElement('button')
+  button.className = className
+  button.type = 'button'
+  button.innerHTML = iconHtml
+  button.setAttribute('aria-label', ariaLabel)
   button.addEventListener('click', handler)
   return button
 }
@@ -729,10 +750,10 @@ async function loadRemotePath(path) {
       const row = document.createElement(entry.type === 'folder' ? 'button' : 'div')
       if (entry.type === 'folder') row.type = 'button'
       row.className = `remote-entry ${entry.type}`
-      row.innerHTML = '<span aria-hidden="true"></span><b></b><small></small>'
-      row.querySelector('span').textContent = entry.type === 'folder' ? '▰' : '•'
+      const isFolder = entry.type === 'folder'
+      row.innerHTML = `<span aria-hidden="true">${isFolder ? ICON_FOLDER : ICON_FILE}</span><b></b><small>${isFolder ? ICON_CHEVRON_RIGHT : ''}</small>`
       row.querySelector('b').textContent = entry.name
-      row.querySelector('small').textContent = entry.type === 'folder' ? 'klasör →' : formatBytes(entry.size)
+      if (!isFolder) row.querySelector('small').textContent = formatBytes(entry.size)
       if (entry.type === 'folder') row.addEventListener('click', () => loadRemotePath(entry.path))
       list.append(row)
     }
@@ -845,7 +866,7 @@ async function renderActivity() {
     row.className = `activity-entry ${entry.direction}`
     const mark = document.createElement('span')
     mark.className = 'activity-mark'
-    mark.textContent = entry.direction === 'upload' ? '↑' : '↓'
+    mark.innerHTML = entry.direction === 'upload' ? ICON_ARROW_UP : ICON_ARROW_DOWN
     const copy = document.createElement('div')
     const title = document.createElement('b')
     title.textContent = entry.title || 'Internet Manager'

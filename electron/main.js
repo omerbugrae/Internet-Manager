@@ -193,7 +193,7 @@ function showMainWindow() {
 }
 
 function createTray() {
-  const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect x="2" y="2" width="28" height="28" rx="9" fill="#171a2b"/><path d="M8 11h16" stroke="#7778ef" stroke-width="4" stroke-linecap="round"/><path d="M8 21h16" stroke="#ff7d4d" stroke-width="4" stroke-linecap="round"/><circle cx="24" cy="7" r="3" fill="#b9ef6a"/></svg>'
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect x="2" y="2" width="28" height="28" rx="9" fill="#1d1d1f"/><path d="M8 11h16" stroke="#0a84ff" stroke-width="4" stroke-linecap="round"/><path d="M8 21h16" stroke="#ff9f0a" stroke-width="4" stroke-linecap="round"/><circle cx="24" cy="7" r="3" fill="#32d74b"/></svg>'
   const icon = nativeImage.createFromDataURL(`data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`).resize({ width: 16, height: 16 })
   tray = new Tray(icon)
   tray.setToolTip('Internet Manager')
@@ -237,12 +237,12 @@ function showTransferNotification(message) {
 
 function titleBarOverlay() {
   const dark = desktopSettings?.theme === 'dark' || (desktopSettings?.theme === 'system' && nativeTheme.shouldUseDarkColors)
-  return { color: dark ? '#0e1020' : '#f1f2f8', symbolColor: dark ? '#f2f2fa' : '#17192a', height: 64 }
+  return { color: dark ? '#1c1c1e' : '#f5f5f7', symbolColor: dark ? '#f5f5f7' : '#1d1d1f', height: 56 }
 }
 
 function windowBackground() {
   const dark = desktopSettings?.theme === 'dark' || (desktopSettings?.theme === 'system' && nativeTheme.shouldUseDarkColors)
-  return dark ? '#0e1020' : '#f1f2f8'
+  return dark ? '#1c1c1e' : '#f5f5f7'
 }
 
 function startEngine() {
