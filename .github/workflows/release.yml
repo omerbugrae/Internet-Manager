@@ -1,0 +1,62 @@
+name: Stable Windows release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-2022
+    env:
+      CSC_LINK: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+      CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Require signing certificate
+        shell: pwsh
+        run: |
+          if (-not $env:CSC_LINK -or -not $env:CSC_KEY_PASSWORD) {
+            throw "WINDOWS_CERTIFICATE_BASE64 and WINDOWS_CERTIFICATE_PASSWORD secrets are required."
+          }
+          $packageVersion = node -p "require('./package.json').version"
+          if ($env:GITHUB_REF_NAME -ne "v$packageVersion") {
+            throw "Tag $env:GITHUB_REF_NAME does not match package version $packageVersion."
+          }
+      - run: npm ci
+      - run: python -m pip install -r requirements-build.txt
+      - run: npm run check
+      - run: npm test
+      - run: npm run build:engine
+      - name: Sign embedded transfer engine
+        shell: pwsh
+        run: |
+          $certificate = Join-Path $env:RUNNER_TEMP "internet-manager-signing.pfx"
+          [IO.File]::WriteAllBytes($certificate, [Convert]::FromBase64String($env:CSC_LINK))
+          $signTool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter signtool.exe |
+            Where-Object FullName -Match '\\x64\\signtool\.exe$' |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1 -ExpandProperty FullName
+          if (-not $signTool) { throw "signtool.exe was not found." }
+          & $signTool sign /fd SHA256 /td SHA256 /tr http://timestamp.digicert.com /f $certificate /p $env:CSC_KEY_PASSWORD dist-engine\internet-manager-engine.exe
+          if ($LASTEXITCODE -ne 0) { throw "Transfer engine signing failed." }
+      - name: Build signed NSIS installer
+        run: npx electron-builder --win nsis -c.win.forceCodeSigning=true
+      - name: Publish stable release
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem dist -Filter "Internet Manager Setup *.exe" | Select-Object -First 1
+          if (-not $installer) { throw "NSIS installer was not produced." }
+          gh release create $env:GITHUB_REF_NAME --verify-tag --generate-notes $installer.FullName "$($installer.FullName).blockmap" "dist/latest.yml"

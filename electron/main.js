@@ -4,6 +4,7 @@ const { createInterface } = require('node:readline')
 const { existsSync, readFileSync, statSync, writeFileSync } = require('node:fs')
 const path = require('node:path')
 const crypto = require('node:crypto')
+const { redact, redactText } = require('./security')
 
 let mainWindow = null
 let captureWindow = null
@@ -22,7 +23,9 @@ const DEFAULT_DESKTOP_SETTINGS = {
   theme: 'system',
   language: 'tr',
   clipboardSuggest: false,
-  completionAction: 'none'
+  completionAction: 'none',
+  proxyUrl: '',
+  verifyTls: true
 }
 
 const PROTOCOL_SCHEME = 'internet-manager'
@@ -148,7 +151,9 @@ function loadDesktopSettings() {
       theme: ['system', 'light', 'dark'].includes(saved.theme) ? saved.theme : 'system',
       language: ['tr', 'en'].includes(saved.language) ? saved.language : 'tr',
       clipboardSuggest: typeof saved.clipboardSuggest === 'boolean' ? saved.clipboardSuggest : false,
-      completionAction: ['none', 'quit', 'sleep', 'shutdown'].includes(saved.completionAction) ? saved.completionAction : 'none'
+      completionAction: ['none', 'quit', 'sleep', 'shutdown'].includes(saved.completionAction) ? saved.completionAction : 'none',
+      proxyUrl: typeof saved.proxyUrl === 'string' && /^https?:\/\//i.test(saved.proxyUrl) ? saved.proxyUrl : '',
+      verifyTls: saved.verifyTls !== false
     }
   } catch {
     return { ...DEFAULT_DESKTOP_SETTINGS }
@@ -202,12 +207,12 @@ function recordActivity(message) {
       title: transfer
         ? path.basename(transfer.direction === 'upload' ? transfer.sourcePath : transfer.destination)
         : null,
-      message: message.message || null,
+      message: message.message ? redactText(message.message) : null,
       createdAt: new Date().toISOString()
     })
     writeFileSync(activityPath(), JSON.stringify(entries.slice(0, 500), null, 2), 'utf8')
   } catch (error) {
-    console.error(`Aktivite günlüğü yazılamadı: ${error.message}`)
+    console.error(`Aktivite günlüğü yazılamadı: ${redactText(error.message)}`)
   }
 }
 
@@ -280,7 +285,11 @@ function startEngine() {
     env: {
       ...process.env,
       PYTHONUNBUFFERED: '1',
-      INTERNET_MANAGER_DATA_DIR: path.join(app.getPath('userData'), 'data')
+      INTERNET_MANAGER_DATA_DIR: path.join(app.getPath('userData'), 'data'),
+      INTERNET_MANAGER_VERIFY_TLS: desktopSettings?.verifyTls === false ? '0' : '1',
+      ...(desktopSettings?.proxyUrl
+        ? { HTTP_PROXY: desktopSettings.proxyUrl, HTTPS_PROXY: desktopSettings.proxyUrl }
+        : {})
     }
   })
 
@@ -306,7 +315,7 @@ function startEngine() {
   })
 
   engine.stderr.on('data', (chunk) => {
-    console.error(`[python] ${chunk.toString().trimEnd()}`)
+    console.error(`[python] ${redactText(chunk.toString().trimEnd())}`)
   })
 
   engine.on('error', () => {
@@ -366,6 +375,10 @@ function createWindow() {
   })
 
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'))
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (!url.startsWith('file://')) event.preventDefault()
+  })
   mainWindow.once('ready-to-show', () => mainWindow.show())
   mainWindow.webContents.once('did-finish-load', () => {
     if (pendingQuickAddUrls.length) {
@@ -387,6 +400,51 @@ function createWindow() {
     }
   })
   mainWindow.on('closed', () => { mainWindow = null })
+}
+
+function configureAutoUpdates() {
+  if (!app.isPackaged) return
+  const { autoUpdater } = require('electron-updater')
+  autoUpdater.autoDownload = false
+  autoUpdater.autoInstallOnAppQuit = true
+  autoUpdater.channel = 'latest'
+  autoUpdater.allowPrerelease = false
+  autoUpdater.allowDowngrade = false
+  autoUpdater.logger = {
+    info: (message) => console.info(redactText(message)),
+    warn: (message) => console.warn(redactText(message)),
+    error: (message) => console.error(redactText(message)),
+    debug: (message) => console.debug(redactText(message))
+  }
+  autoUpdater.on('update-available', async (info) => {
+    const english = desktopSettings?.language === 'en'
+    const answer = await dialog.showMessageBox(mainWindow, {
+      type: 'info',
+      buttons: [english ? 'Download' : 'İndir', english ? 'Later' : 'Daha sonra'],
+      defaultId: 0,
+      cancelId: 1,
+      title: english ? 'Update available' : 'Güncelleme hazır',
+      message: english ? `Internet Manager ${info.version} is available.` : `Internet Manager ${info.version} hazır.`,
+      detail: english ? 'The current version stays available if the download fails.' : 'İndirme başarısız olursa mevcut sürüm korunur.'
+    })
+    if (answer.response === 0) void autoUpdater.downloadUpdate()
+  })
+  autoUpdater.on('update-downloaded', async (info) => {
+    const english = desktopSettings?.language === 'en'
+    const answer = await dialog.showMessageBox(mainWindow, {
+      type: 'info',
+      buttons: [english ? 'Restart and install' : 'Yeniden başlat ve kur', english ? 'On exit' : 'Çıkışta'],
+      defaultId: 0,
+      cancelId: 1,
+      title: english ? 'Update downloaded' : 'Güncelleme indirildi',
+      message: english ? `Version ${info.version} is ready to install.` : `${info.version} sürümü kurulmaya hazır.`
+    })
+    if (answer.response === 0) autoUpdater.quitAndInstall(false, true)
+  })
+  autoUpdater.on('error', (error) => {
+    recordActivity({ type: 'engine.error', message: `Güncelleme kontrolü başarısız: ${redactText(error.message)}` })
+  })
+  setTimeout(() => void autoUpdater.checkForUpdates(), 15000)
 }
 
 async function checkClipboardSuggestion() {
@@ -478,6 +536,10 @@ async function showCapturePanel() {
       webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true }
     })
     captureWindow.loadFile(path.join(__dirname, 'renderer', 'capture.html'))
+    captureWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+    captureWindow.webContents.on('will-navigate', (event, target) => {
+      if (!target.startsWith('file://')) event.preventDefault()
+    })
   }
   captureWindow.show()
   captureWindow.focus()
@@ -898,6 +960,10 @@ ipcMain.handle('clipboard:write', async (_event, value) => {
 ipcMain.handle('desktop-settings:get', () => desktopSettings)
 
 ipcMain.handle('desktop-settings:update', (_event, input) => {
+  const proxyUrl = typeof input?.proxyUrl === 'string' ? input.proxyUrl.trim() : ''
+  if (proxyUrl && !/^https?:\/\/[^\s]+$/i.test(proxyUrl)) {
+    throw new Error('Proxy adresi HTTP veya HTTPS ile başlamalı.')
+  }
   desktopSettings = {
     closeToTray: Boolean(input?.closeToTray),
     notifications: Boolean(input?.notifications),
@@ -905,7 +971,9 @@ ipcMain.handle('desktop-settings:update', (_event, input) => {
     theme: ['system', 'light', 'dark'].includes(input?.theme) ? input.theme : 'system',
     language: ['tr', 'en'].includes(input?.language) ? input.language : 'tr',
     clipboardSuggest: Boolean(input?.clipboardSuggest),
-    completionAction: ['none', 'quit', 'sleep', 'shutdown'].includes(input?.completionAction) ? input.completionAction : 'none'
+    completionAction: ['none', 'quit', 'sleep', 'shutdown'].includes(input?.completionAction) ? input.completionAction : 'none',
+    proxyUrl,
+    verifyTls: input?.verifyTls !== false
   }
   saveDesktopSettings(desktopSettings)
   app.setLoginItemSettings({
@@ -923,6 +991,35 @@ ipcMain.handle('activity:list', () => loadActivity())
 ipcMain.handle('activity:clear', () => {
   writeFileSync(activityPath(), '[]', 'utf8')
   return true
+})
+
+ipcMain.handle('diagnostics:export', async () => {
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: desktopSettings?.language === 'en' ? 'Export diagnostics' : 'Tanılama paketini dışa aktar',
+    defaultPath: `internet-manager-diagnostics-${new Date().toISOString().slice(0, 10)}.json`,
+    filters: [{ name: 'JSON', extensions: ['json'] }]
+  })
+  if (result.canceled || !result.filePath) return null
+  let database = { integrity: 'engine-unavailable' }
+  if (engineReady) {
+    try {
+      database = await sendCommand('diagnostics.get', {}, 30000)
+    } catch (error) {
+      database = { integrity: 'check-failed', error: redactText(error.message) }
+    }
+  }
+  const report = redact({
+    formatVersion: 1,
+    generatedAt: new Date().toISOString(),
+    application: { name: app.getName(), version: app.getVersion(), packaged: app.isPackaged },
+    runtime: { electron: process.versions.electron, chrome: process.versions.chrome, node: process.versions.node },
+    system: { platform: process.platform, architecture: process.arch, release: require('node:os').release() },
+    engine: { ready: engineReady, database, settings: engineSettings },
+    desktopSettings: { ...desktopSettings, proxyUrl: desktopSettings.proxyUrl ? '[configured]' : '' },
+    recentActivity: loadActivity().slice(0, 200)
+  })
+  writeFileSync(result.filePath, JSON.stringify(report, null, 2), 'utf8')
+  return result.filePath
 })
 
 ipcMain.handle('transfer:open', async (_event, transferId, mode) => {
@@ -964,6 +1061,7 @@ if (!gotSingleInstanceLock) {
     desktopSettings = loadDesktopSettings()
     startEngine()
     createWindow()
+    configureAutoUpdates()
     createTray()
     handleQuickAddArgs(process.argv)
     nativeTheme.on('updated', () => {

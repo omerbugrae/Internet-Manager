@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import posixpath
 import stat
 from abc import ABC, abstractmethod
@@ -63,9 +64,13 @@ class WebDavProvider(UploadProvider):
     def auth(self) -> aiohttp.BasicAuth:
         return aiohttp.BasicAuth(self.connection["username"], self.connection.get("password", ""))
 
+    @staticmethod
+    def connector() -> aiohttp.TCPConnector:
+        return aiohttp.TCPConnector(ssl=os.environ.get("INTERNET_MANAGER_VERIFY_TLS", "1") != "0")
+
     async def test(self) -> None:
         timeout = aiohttp.ClientTimeout(total=15)
-        async with aiohttp.ClientSession(timeout=timeout, auth=self.auth()) as session:
+        async with aiohttp.ClientSession(timeout=timeout, auth=self.auth(), connector=self.connector(), trust_env=True) as session:
             async with session.request("PROPFIND", self.connection["url"], headers={"Depth": "0"}) as response:
                 if response.status >= 400:
                     response.raise_for_status()
@@ -74,7 +79,7 @@ class WebDavProvider(UploadProvider):
         base = self.connection["url"].rstrip("/")
         url = f"{base}/{quote(path.strip('/'), safe='/')}".rstrip("/") + "/"
         timeout = aiohttp.ClientTimeout(total=20)
-        async with aiohttp.ClientSession(timeout=timeout, auth=self.auth()) as session:
+        async with aiohttp.ClientSession(timeout=timeout, auth=self.auth(), connector=self.connector(), trust_env=True) as session:
             async with session.request("PROPFIND", url, headers={"Depth": "1"}) as response:
                 response.raise_for_status()
                 body = await response.read()
@@ -108,7 +113,7 @@ class WebDavProvider(UploadProvider):
         limiter = BandwidthLimiter(record.get("speed_limit", 0))
         meter = ProgressMeter(record["id"], total, 0, emit)
         timeout = aiohttp.ClientTimeout(total=None, connect=30, sock_read=60)
-        async with aiohttp.ClientSession(timeout=timeout, auth=self.auth()) as session:
+        async with aiohttp.ClientSession(timeout=timeout, auth=self.auth(), connector=self.connector(), trust_env=True) as session:
             url = await resolve_webdav_conflict(session, url, record["conflict_policy"])
             if url is None:
                 return {"skipped": True, "uploadedBytes": 0, "totalBytes": total}

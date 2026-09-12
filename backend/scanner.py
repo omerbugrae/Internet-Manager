@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import ipaddress
+import os
 import re
 import socket
 from html.parser import HTMLParser
@@ -36,8 +37,9 @@ class LinkParser(HTMLParser):
 async def scan_url(url: str) -> dict:
     await ensure_public_url(url)
     timeout = aiohttp.ClientTimeout(total=30, connect=10, sock_read=15)
-    headers = {"User-Agent": "InternetManager/0.8.0"}
-    async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
+    headers = {"User-Agent": "InternetManager/1.0.0"}
+    connector = aiohttp.TCPConnector(ssl=os.environ.get("INTERNET_MANAGER_VERIFY_TLS", "1") != "0")
+    async with aiohttp.ClientSession(timeout=timeout, headers=headers, connector=connector, trust_env=True) as session:
         async with session.get(url, allow_redirects=True) as response:
             await ensure_public_url(str(response.url))
             response.raise_for_status()
@@ -76,8 +78,9 @@ async def scan_url(url: str) -> dict:
 
 async def probe_urls(urls: list[str]) -> list[dict]:
     timeout = aiohttp.ClientTimeout(total=20, connect=10, sock_read=15)
-    headers = {"User-Agent": "InternetManager/0.8.0"}
-    async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
+    headers = {"User-Agent": "InternetManager/1.0.0"}
+    connector = aiohttp.TCPConnector(ssl=os.environ.get("INTERNET_MANAGER_VERIFY_TLS", "1") != "0")
+    async with aiohttp.ClientSession(timeout=timeout, headers=headers, connector=connector, trust_env=True) as session:
         semaphore = asyncio.Semaphore(6)
 
         async def inspect(url: str) -> dict:

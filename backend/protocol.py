@@ -121,6 +121,7 @@ class Command(StrictMessage):
         "automation.get",
         "network.changed",
         "transfers.list",
+        "diagnostics.get",
         "engine.shutdown",
     ]
     payload: dict = Field(default_factory=dict)

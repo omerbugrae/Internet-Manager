@@ -481,6 +481,8 @@ class TransferEngine:
                 control.stop("shutdown")
         elif command.type == "transfers.list":
             self.snapshot()
+        elif command.type == "diagnostics.get":
+            return self.store.diagnostics()
         elif command.type == "download.start":
             payload = DownloadPayload.model_validate(command.payload)
             scheduled_at = self.normalize_schedule(payload.scheduled_at)
@@ -604,7 +606,7 @@ class TransferEngine:
         return moment.isoformat() if moment else None
 
     async def run(self) -> None:
-        self.emit({"type": "engine.ready", "version": "0.8.0"})
+        self.emit({"type": "engine.ready", "version": "1.0.0"})
         self.apply_missed_schedules()
         self.apply_speed_window()
         self.snapshot()

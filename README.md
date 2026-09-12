@@ -2,7 +2,7 @@
 
 Electron arayüzü ve Python transfer motoruyla geliştirilen ücretsiz indirme/yükleme yöneticisi.
 
-## v0.8'i çalıştırma
+## v1.0'ı çalıştırma
 
 Python ortamını etkinleştirin:
 
@@ -19,6 +19,8 @@ npm start
 
 Electron, geliştirme sırasında `venv\Scripts\python.exe` üzerinden Python motorunu otomatik başlatır.
 
+Proxy ve TLS doğrulama seçenekleri masaüstü ayarlarında bulunur ve uygulama yeniden başlatıldığında transfer motoruna uygulanır. TLS doğrulamasını kapatmak yalnızca denetimli test ortamlarında önerilir.
+
 ## Statik kontroller
 
 ```powershell
@@ -26,7 +28,19 @@ npm run check
 python -m compileall -q backend
 ```
 
-## v0.8 kapsamı
+## Windows kararlı sürüm paketi
+
+Paketleme bağımlılıklarını kurup NSIS kurulum dosyasını üretin:
+
+```powershell
+.\venv\Scripts\python.exe -m pip install -r requirements-build.txt
+npm install
+npm run dist
+```
+
+Çıktı `dist\Internet Manager Setup 1.0.0.exe` konumuna yazılır. İmzalı GitHub sürümlerindeki `latest.yml` ve blockmap dosyaları otomatik güncelleme altyapısı tarafından kullanılır. `v1.0.0` etiketiyle çalışan yayın iş akışı, motoru ve installer'ı imzalamadan sürüm yayımlamaz.
+
+## v1.0 kapsamı
 
 - HTTP/HTTPS dosyası indirme
 - Windows kayıt konumu seçici
@@ -83,6 +97,10 @@ python -m compileall -q backend
 - Kaçırılmış zamanlanmış görevler için "hemen başlat" veya "atla" tercihi
 - Bağlantı kesilince transferleri duraklatıp bağlantı gelince otomatik sürdürme
 - Tüm transferler bitince uygulamayı kapatma, bilgisayarı uyutma veya kapatma (30 saniyelik iptal edilebilir geri sayımla)
+- Sürümlü ve geriye uyumlu SQLite migration sistemi ile bütünlük denetimi
+- HTTP/HTTPS proxy ve isteğe bağlı TLS sertifika doğrulama ayarı
+- Token, kimlik bilgisi ve hassas URL parametrelerini temizleyen aktivite günlüğü
+- Sistem, runtime ve veritabanı durumunu içeren dışa aktarılabilir tanılama paketi
 
 Hızlı yakalamayı kullanmak için bağlantıyı tarayıcıda kopyalayın ve uygulama çalışırken `Ctrl+Alt+D` tuşlarına basın. Tarama yalnızca herkese açık HTTP/HTTPS içeriklerini ve sayfanın statik HTML bağlantılarını görür; tarayıcı oturumuna, giriş yapılmış sayfalara, JavaScript ile sonradan üretilen bağlantılara veya DRM içeriğine erişmez.
 

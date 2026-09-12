@@ -14,13 +14,21 @@ def now_iso() -> str:
 class TransferStore:
     def __init__(self, data_directory: Path) -> None:
         data_directory.mkdir(parents=True, exist_ok=True)
-        self.connection = sqlite3.connect(data_directory / "transfers.db")
+        self.database_path = data_directory / "transfers.db"
+        self.connection = sqlite3.connect(self.database_path)
         self.connection.row_factory = sqlite3.Row
+        self.connection.execute("PRAGMA foreign_keys=ON")
+        self.connection.execute("PRAGMA busy_timeout=5000")
         self.connection.execute("PRAGMA journal_mode=WAL")
         self._migrate()
 
     def _migrate(self) -> None:
-        self.connection.executescript("""
+        version = int(self.connection.execute("PRAGMA user_version").fetchone()[0])
+        if version > 2:
+            raise RuntimeError(f"Veritabanı sürümü desteklenmiyor: {version}")
+        if version < 1:
+            self.connection.executescript("""
+            BEGIN IMMEDIATE;
             CREATE TABLE IF NOT EXISTS transfers (
                 id TEXT PRIMARY KEY,
                 url TEXT NOT NULL,
@@ -62,30 +70,53 @@ class TransferStore:
                 updated_at TEXT NOT NULL,
                 FOREIGN KEY(transfer_id) REFERENCES transfers(id) ON DELETE CASCADE
             );
+            CREATE TABLE IF NOT EXISTS migration_history (
+                version INTEGER PRIMARY KEY,
+                applied_at TEXT NOT NULL
+            );
+            COMMIT;
         """)
-        columns = {
-            row["name"] for row in self.connection.execute("PRAGMA table_info(transfers)")
-        }
-        if "priority" not in columns:
-            self.connection.execute(
-                "ALTER TABLE transfers ADD COLUMN priority INTEGER NOT NULL DEFAULT 0"
-            )
-        if "speed_limit" not in columns:
-            self.connection.execute(
-                "ALTER TABLE transfers ADD COLUMN speed_limit INTEGER NOT NULL DEFAULT 0"
-            )
-        for name, definition in {
-            "direction": "TEXT NOT NULL DEFAULT 'download'",
-            "source_path": "TEXT",
-            "remote_path": "TEXT",
-            "provider": "TEXT",
-            "profile_id": "TEXT",
-            "scheduled_at": "TEXT",
-            "repeat_rule": "TEXT NOT NULL DEFAULT 'none'",
-        }.items():
-            if name not in columns:
-                self.connection.execute(f"ALTER TABLE transfers ADD COLUMN {name} {definition}")
+            columns = {
+                row["name"] for row in self.connection.execute("PRAGMA table_info(transfers)")
+            }
+            for name, definition in {
+                "priority": "INTEGER NOT NULL DEFAULT 0",
+                "speed_limit": "INTEGER NOT NULL DEFAULT 0",
+                "direction": "TEXT NOT NULL DEFAULT 'download'",
+                "source_path": "TEXT",
+                "remote_path": "TEXT",
+                "provider": "TEXT",
+                "profile_id": "TEXT",
+                "scheduled_at": "TEXT",
+                "repeat_rule": "TEXT NOT NULL DEFAULT 'none'",
+            }.items():
+                if name not in columns:
+                    self.connection.execute(f"ALTER TABLE transfers ADD COLUMN {name} {definition}")
+            self._record_migration(1)
+            version = 1
+        if version < 2:
+            with self.connection:
+                self.connection.execute(
+                    "CREATE INDEX IF NOT EXISTS transfers_schedule_idx ON transfers(status, scheduled_at)"
+                )
+                self._record_migration(2)
         self.connection.commit()
+
+    def _record_migration(self, version: int) -> None:
+        self.connection.execute(
+            "INSERT OR IGNORE INTO migration_history(version, applied_at) VALUES (?, ?)",
+            (version, now_iso()),
+        )
+        self.connection.execute(f"PRAGMA user_version={version}")
+
+    def diagnostics(self) -> dict[str, Any]:
+        integrity = self.connection.execute("PRAGMA integrity_check").fetchone()[0]
+        return {
+            "schemaVersion": int(self.connection.execute("PRAGMA user_version").fetchone()[0]),
+            "integrity": integrity,
+            "transferCount": int(self.connection.execute("SELECT COUNT(*) FROM transfers").fetchone()[0]),
+            "journalMode": self.connection.execute("PRAGMA journal_mode").fetchone()[0],
+        }
 
     def create(self, transfer: dict[str, Any]) -> None:
         timestamp = now_iso()

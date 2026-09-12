@@ -40,6 +40,7 @@ contextBridge.exposeInMainWorld('internetManager', {
   updateDesktopSettings: (settings) => ipcRenderer.invoke('desktop-settings:update', settings),
   listActivity: () => ipcRenderer.invoke('activity:list'),
   clearActivity: () => ipcRenderer.invoke('activity:clear'),
+  exportDiagnostics: () => ipcRenderer.invoke('diagnostics:export'),
   openTransfer: (transferId, mode) => ipcRenderer.invoke('transfer:open', transferId, mode),
   scanUrl: (url) => ipcRenderer.invoke('capture:scan', url),
   closeCapture: () => ipcRenderer.invoke('capture:close'),

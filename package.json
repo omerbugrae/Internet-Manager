@@ -1,11 +1,14 @@
 {
   "name": "internet-manager",
-  "version": "0.8.0",
+  "version": "1.0.0",
   "description": "Electron arayüzlü, Python tabanlı indirme ve yükleme yöneticisi",
   "main": "electron/main.js",
   "scripts": {
     "start": "electron .",
-    "check": "node --check electron/main.js && node --check electron/preload.js && node --check electron/renderer/app.js && node --check electron/renderer/capture.js"
+    "check": "node --check electron/main.js && node --check electron/preload.js && node --check electron/renderer/app.js && node --check electron/renderer/capture.js && node --check electron/security.js && node --check scripts/run-python.js",
+    "test": "node tests/security.test.js && node scripts/run-python.js -m pytest -q",
+    "build:engine": "node scripts/run-python.js -m PyInstaller --noconfirm --clean --onefile --paths backend --name internet-manager-engine backend\\main.py --distpath dist-engine",
+    "dist": "npm run check && npm test && npm run build:engine && electron-builder --win nsis"
   },
   "repository": {
     "type": "git",
@@ -25,9 +28,49 @@
   },
   "homepage": "https://github.com/omerbugrae/Internet-Manager#readme",
   "devDependencies": {
-    "electron": "^44.2.0"
+    "electron": "^44.2.0",
+    "electron-builder": "^26.15.3"
   },
   "overrides": {
     "yauzl": "^3.3.1"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9"
+  },
+  "build": {
+    "appId": "com.internetmanager.desktop",
+    "productName": "Internet Manager",
+    "asar": true,
+    "files": [
+      "electron/**/*",
+      "package.json",
+      "LICENSE",
+      "THIRD_PARTY_NOTICES.md",
+      "PRIVACY.md",
+      "CHANGELOG.md",
+      "docs/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "dist-engine/internet-manager-engine.exe",
+        "to": "backend/internet-manager-engine.exe"
+      }
+    ],
+    "win": {
+      "target": "nsis",
+      "signAndEditExecutable": true
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "deleteAppDataOnUninstall": false
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "omerbugrae",
+      "repo": "Internet-Manager"
+    }
   }
 }

@@ -1,10 +1,10 @@
 <!doctype html>
 <html lang="tr">
   <head>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'" />
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:; connect-src 'none'" />
     <title>Internet Manager</title>
     <link rel="stylesheet" href="style.css" />
   </head>
@@ -13,7 +13,7 @@
       <header class="titlebar">
         <div class="logo" aria-hidden="true"><span></span></div>
         <div class="brand-lockup"><strong>Internet Manager</strong><span>TRANSFER DESK</span></div>
-        <span class="version">v0.8</span>
+        <span class="version">v1.0</span>
       </header>
 
       <aside class="sidebar">
@@ -55,6 +55,10 @@
           <button class="nav-item" id="settings-button" type="button">
             <svg class="ic" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>
             <span data-i18n="settings">Ayarlar</span><small>Ctrl ,</small>
+          </button>
+          <button class="nav-item" id="help-button" type="button">
+            <svg class="ic" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.8 9a2.3 2.3 0 1 1 3.5 2c-.8.5-1.3 1-1.3 2"/><path d="M12 17h.01"/></svg>
+            <span data-i18n="help">Yardım</span><small>F1</small>
           </button>
         </div>
         <div class="engine-status" id="engine-status"><span></span><b data-i18n="engineWaiting">Motor bekleniyor</b></div>
@@ -283,6 +287,8 @@
         <div class="setting-row"><div><b data-i18n="launchAtStartup">Windows ile başlat</b><small data-i18n="launchAtStartupHelp">Oturum açıldığında Internet Manager hazır olsun.</small></div><input id="setting-launch-at-startup" type="checkbox" /></div>
         <div class="setting-row"><div><b data-i18n="clipboardSuggest">Pano bağlantısını algıla</b><small data-i18n="clipboardSuggestHelp">Pencereye her dönüşte panoda bağlantı varsa kuyruğa eklemeyi öner.</small></div><input id="setting-clipboard-suggest" type="checkbox" /></div>
         <div class="setting-grid"><label for="setting-theme" data-i18n="theme">Tema</label><select id="setting-theme"><option value="system" data-i18n="themeSystem">Sistem</option><option value="light" data-i18n="themeLight">Açık</option><option value="dark" data-i18n="themeDark">Koyu</option></select><label for="setting-language" data-i18n="language">Dil</label><select id="setting-language"><option value="tr">Türkçe</option><option value="en">English</option></select></div>
+        <label for="setting-proxy" data-i18n="proxyAddress">Proxy adresi (isteğe bağlı)</label><input id="setting-proxy" type="url" inputmode="url" placeholder="http://proxy.example:8080" />
+        <div class="setting-row"><div><b data-i18n="verifyTls">TLS sertifikalarını doğrula</b><small data-i18n="networkRestartHelp">Ağ ayarları uygulama yeniden başlatıldığında etkinleşir.</small></div><input id="setting-verify-tls" type="checkbox" /></div>
         <div class="shortcut-sheet"><b data-i18n="shortcuts">Kısayollar</b><span><kbd>Ctrl N</kbd> <i data-i18n="newDownload">Yeni indirme</i></span><span><kbd>Ctrl Shift N</kbd> <i data-i18n="newUpload">Yeni yükleme</i></span><span><kbd>Ctrl Alt D</kbd> <i data-i18n="smartCapture">Akıllı yakalama</i></span></div>
         <div class="dialog-actions"><button class="text-button close-settings-dialog" type="button" data-i18n="cancel">Vazgeç</button><button class="primary-action" type="submit" data-i18n="saveSettings">Ayarları kaydet</button></div>
       </form>
@@ -332,7 +338,7 @@
     <dialog id="activity-dialog" class="wide-dialog">
       <div class="activity-panel">
         <div class="dialog-heading"><p class="eyebrow" data-i18n="activityLog">AKTİVİTE GÜNLÜĞÜ</p><button class="icon-button close-activity-dialog" data-i18n-aria="closeWindow" aria-label="Pencereyi kapat" type="button"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg></button></div>
-        <div class="activity-heading"><h2 data-i18n="activityTitle">Hattın yakın geçmişi.</h2><div><select id="activity-filter" data-i18n-aria="activityFilter" aria-label="Aktivite filtresi"><option value="all" data-i18n="all">Tümü</option><option value="download" data-i18n="downloads">İndirilenler</option><option value="upload" data-i18n="uploads">Yüklenenler</option><option value="error" data-i18n="errors">Hatalar</option></select><button id="clear-activity" type="button" data-i18n="clear">Temizle</button></div></div>
+        <div class="activity-heading"><h2 data-i18n="activityTitle">Hattın yakın geçmişi.</h2><div><select id="activity-filter" data-i18n-aria="activityFilter" aria-label="Aktivite filtresi"><option value="all" data-i18n="all">Tümü</option><option value="download" data-i18n="downloads">İndirilenler</option><option value="upload" data-i18n="uploads">Yüklenenler</option><option value="error" data-i18n="errors">Hatalar</option></select><button id="export-diagnostics" type="button" data-i18n="exportDiagnostics">Tanılama</button><button id="clear-activity" type="button" data-i18n="clear">Temizle</button></div></div>
         <div class="activity-list" id="activity-list"></div>
       </div>
     </dialog>
@@ -344,6 +350,21 @@
         <dl class="details-grid" id="details-grid"></dl>
         <div class="details-error hidden" id="details-error"></div>
         <div class="dialog-actions"><button class="text-button" id="open-transfer-folder" type="button" data-i18n="openFolder">Klasörü aç</button><button class="primary-action" id="open-transfer-file" type="button" data-i18n="openFile">Dosyayı aç</button></div>
+      </div>
+    </dialog>
+
+    <dialog id="help-dialog" class="wide-dialog">
+      <div class="details-panel">
+        <div class="dialog-heading"><p class="eyebrow" data-i18n="quickGuide">HIZLI KULLANIM</p><button class="icon-button close-help-dialog" data-i18n-aria="closeWindow" aria-label="Pencereyi kapat" type="button"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg></button></div>
+        <h2 data-i18n="helpTitle">İlk transferini üç adımda başlat.</h2>
+        <ol class="help-steps">
+          <li data-i18n="helpDownload">Yeni indirme ile bağlantıyı ve kayıt konumunu seç; görev kuyruğa eklenir.</li>
+          <li data-i18n="helpUpload">Yükleme için önce Yönet ekranından SFTP, WebDAV veya S3 profili oluştur.</li>
+          <li data-i18n="helpRecover">Uygulama kapanırsa yarım görevler açılışta duraklatılmış olarak kurtarılır.</li>
+        </ol>
+        <p data-i18n="helpTips">Toplu ekleme için metin/CSV içe aktarabilir, dosya veya bağlantıları pencereye bırakabilir ve Ctrl+Alt+D ile hızlı yakalamayı açabilirsin.</p>
+        <p class="capability-note" data-i18n="helpSecurity">Parolalar Windows güvenli depolamasında tutulur. Tanılama paketi hassas değerleri dışa aktarmaz.</p>
+        <div class="dialog-actions"><button class="primary-action close-help-dialog" type="button" data-i18n="close">Kapat</button></div>
       </div>
     </dialog>
 

@@ -6,7 +6,9 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 dist/
+dist-engine/
 build/
+*.spec
 release/
 *.part
 *.log

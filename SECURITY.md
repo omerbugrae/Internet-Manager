@@ -2,12 +2,13 @@
 
 ## Desteklenen sürümler
 
-Internet Manager şu anda v0.x geliştirme aşamasındadır. Güvenlik düzeltmeleri yalnızca en güncel `main` dalına ve en son yayımlanan sürüme uygulanır; eski v0.x sürümleri için geriye dönük yama yapılmaz.
+Internet Manager 1.x kararlı sürüm hattındadır. Güvenlik düzeltmeleri en güncel `main` dalına ve en son 1.x sürümüne uygulanır; v0.x geliştirme sürümleri artık desteklenmez.
 
 | Sürüm | Destek |
 | --- | --- |
-| En güncel (main) | ✅ |
-| Daha eski sürümler | ❌ |
+| 1.x (en güncel yama) | ✅ |
+| main | ✅ |
+| v0.x ve eski 1.x yamaları | ❌ |
 
 ## Zafiyet bildirimi
 

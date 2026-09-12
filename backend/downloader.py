@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import re
 import shutil
 import time
@@ -110,7 +111,9 @@ async def download_file(
     timeout = aiohttp.ClientTimeout(total=None, connect=30, sock_read=60)
     task_limiter = BandwidthLimiter(record.get("speed_limit", 0))
 
-    async with aiohttp.ClientSession(timeout=timeout) as session:
+    verify_tls = os.environ.get("INTERNET_MANAGER_VERIFY_TLS", "1") != "0"
+    connector = aiohttp.TCPConnector(ssl=verify_tls)
+    async with aiohttp.ClientSession(timeout=timeout, connector=connector, trust_env=True) as session:
         info = await probe_resource(session, record["url"])
         existing = partial_size(partial_path)
         chunk_files = chunk_paths(partial_path)
@@ -158,7 +161,7 @@ async def sequential_download(session, record, info, emit, control, global_limit
     final_path = Path(record["destination"])
     partial_path = Path(record["partial_path"])
     existing = partial_size(partial_path)
-    headers = {"User-Agent": "InternetManager/0.3"}
+    headers = {"User-Agent": "InternetManager/1.0.0"}
     if existing:
         headers["Range"] = f"bytes={existing}-"
         validator = record.get("etag") or record.get("last_modified")
@@ -218,7 +221,7 @@ async def parallel_download(session, record, info, emit, control, global_limiter
         completed = min(partial_size(part), end - start + 1)
         if completed >= end - start + 1:
             return
-        headers = {"Range": f"bytes={start + completed}-{end}", "User-Agent": "InternetManager/0.3"}
+        headers = {"Range": f"bytes={start + completed}-{end}", "User-Agent": "InternetManager/1.0.0"}
         async with session.get(record["url"], headers=headers, allow_redirects=True) as response:
             if response.status != 206:
                 raise RangeNotSupported

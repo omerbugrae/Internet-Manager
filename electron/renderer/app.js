@@ -33,7 +33,8 @@ let remoteBrowserPath = '/'
 const settingsDialog = document.querySelector('#settings-dialog')
 const activityDialog = document.querySelector('#activity-dialog')
 const detailsDialog = document.querySelector('#details-dialog')
-let desktopSettings = { closeToTray: true, notifications: true, launchAtStartup: false, clipboardSuggest: false, theme: 'system', language: 'tr' }
+const helpDialog = document.querySelector('#help-dialog')
+let desktopSettings = { closeToTray: true, notifications: true, launchAtStartup: false, clipboardSuggest: false, theme: 'system', language: 'tr', proxyUrl: '', verifyTls: true }
 let currentTransferFilter = 'all'
 let detailsTransferId = null
 let automationSettings = { speedWindows: [], missedPolicy: 'run', activeWindowLimit: null, baseSpeedLimit: 0 }
@@ -44,11 +45,11 @@ let completionArmed = true
 const translations = {
   tr: {
     newDownload: 'Yeni indirme', newUpload: 'Yeni yükleme', allTransfers: 'Tüm transferler', downloads: 'İndirilenler', uploads: 'Yüklenenler',
-    activity: 'Aktivite', settings: 'Ayarlar', desktopSettings: 'MASAÜSTÜ AYARLARI', settingsTitle: 'Uygulama sana ayak uydursun.',
+    activity: 'Aktivite', settings: 'Ayarlar', help: 'Yardım', quickGuide: 'HIZLI KULLANIM', helpTitle: 'İlk transferini üç adımda başlat.', helpDownload: 'Yeni indirme ile bağlantıyı ve kayıt konumunu seç; görev kuyruğa eklenir.', helpUpload: 'Yükleme için önce Yönet ekranından SFTP, WebDAV veya S3 profili oluştur.', helpRecover: 'Uygulama kapanırsa yarım görevler açılışta duraklatılmış olarak kurtarılır.', helpTips: 'Toplu ekleme için metin/CSV içe aktarabilir, dosya veya bağlantıları pencereye bırakabilir ve Ctrl+Alt+D ile hızlı yakalamayı açabilirsin.', helpSecurity: 'Parolalar Windows güvenli depolamasında tutulur. Tanılama paketi hassas değerleri dışa aktarmaz.', desktopSettings: 'MASAÜSTÜ AYARLARI', settingsTitle: 'Uygulama sana ayak uydursun.',
     closeToTray: 'Kapatınca arka planda çalış', closeToTrayHelp: 'Pencere kapanır, transferler sistem tepsisinde sürer.',
     notifications: 'Bildirimler', notificationsHelp: 'Tamamlanan ve başarısız transferleri bildir.', launchAtStartup: 'Windows ile başlat',
     launchAtStartupHelp: 'Oturum açıldığında Internet Manager hazır olsun.', theme: 'Tema', language: 'Dil', themeSystem: 'Sistem', themeLight: 'Açık', themeDark: 'Koyu',
-    shortcuts: 'Kısayollar', smartCapture: 'Akıllı yakalama', cancel: 'Vazgeç', saveSettings: 'Ayarları kaydet', activityLog: 'AKTİVİTE GÜNLÜĞÜ',
+    shortcuts: 'Kısayollar', smartCapture: 'Akıllı yakalama', cancel: 'Vazgeç', saveSettings: 'Ayarları kaydet', activityLog: 'AKTİVİTE GÜNLÜĞÜ', proxyAddress: 'Proxy adresi (isteğe bağlı)', verifyTls: 'TLS sertifikalarını doğrula', networkRestartHelp: 'Ağ ayarları uygulama yeniden başlatıldığında etkinleşir.', exportDiagnostics: 'Tanılama',
     activityTitle: 'Hattın yakın geçmişi.', all: 'Tümü', errors: 'Hatalar', clear: 'Temizle', transferDetails: 'TRANSFER AYRINTILARI', openFolder: 'Klasörü aç', openFile: 'Dosyayı aç',
     engineWaiting: 'Motor bekleniyor', engineReady: 'Motor hazır', engineError: 'Motor hatası', sidebarNote: 'Bağlantıyı bırak.\nRotayı biz yönetelim.',
     liveDesk: 'CANLI TRANSFER MASASI', heroLine1: 'Transferler', activeTransfer: 'aktif transfer',
@@ -93,11 +94,11 @@ const translations = {
   },
   en: {
     newDownload: 'New download', newUpload: 'New upload', allTransfers: 'All transfers', downloads: 'Downloads', uploads: 'Uploads',
-    activity: 'Activity', settings: 'Settings', desktopSettings: 'DESKTOP SETTINGS', settingsTitle: 'Make the app work your way.',
+    activity: 'Activity', settings: 'Settings', help: 'Help', quickGuide: 'QUICK GUIDE', helpTitle: 'Start your first transfer in three steps.', helpDownload: 'Choose a link and destination under New download; the task is added to the queue.', helpUpload: 'For uploads, first create an SFTP, WebDAV, or S3 profile under Manage.', helpRecover: 'If the app closes, incomplete tasks are recovered as paused on the next launch.', helpTips: 'Bulk-import text/CSV files, drop files or links on the window, or press Ctrl+Alt+D for Smart Capture.', helpSecurity: 'Passwords stay in Windows secure storage. Diagnostic exports omit sensitive values.', desktopSettings: 'DESKTOP SETTINGS', settingsTitle: 'Make the app work your way.',
     closeToTray: 'Keep running when closed', closeToTrayHelp: 'The window closes while transfers continue in the system tray.',
     notifications: 'Notifications', notificationsHelp: 'Notify when transfers complete or fail.', launchAtStartup: 'Launch with Windows',
     launchAtStartupHelp: 'Keep Internet Manager ready after sign-in.', theme: 'Theme', language: 'Language', themeSystem: 'System', themeLight: 'Light', themeDark: 'Dark',
-    shortcuts: 'Shortcuts', smartCapture: 'Smart capture', cancel: 'Cancel', saveSettings: 'Save settings', activityLog: 'ACTIVITY LOG',
+    shortcuts: 'Shortcuts', smartCapture: 'Smart capture', cancel: 'Cancel', saveSettings: 'Save settings', activityLog: 'ACTIVITY LOG', proxyAddress: 'Proxy address (optional)', verifyTls: 'Verify TLS certificates', networkRestartHelp: 'Network settings take effect after restarting the app.', exportDiagnostics: 'Diagnostics',
     activityTitle: 'The line’s recent history.', all: 'All', errors: 'Errors', clear: 'Clear', transferDetails: 'TRANSFER DETAILS', openFolder: 'Open folder', openFile: 'Open file',
     engineWaiting: 'Engine starting', engineReady: 'Engine ready', engineError: 'Engine error', sidebarNote: 'Let go of the connection.\nWe’ll manage the route.',
     liveDesk: 'LIVE TRANSFER DESK', heroLine1: 'Transfers', activeTransfer: 'active transfer',
@@ -902,6 +903,8 @@ function fillSettingsForm() {
   document.querySelector('#setting-clipboard-suggest').checked = Boolean(desktopSettings.clipboardSuggest)
   document.querySelector('#setting-theme').value = desktopSettings.theme
   document.querySelector('#setting-language').value = desktopSettings.language
+  document.querySelector('#setting-proxy').value = desktopSettings.proxyUrl || ''
+  document.querySelector('#setting-verify-tls').checked = desktopSettings.verifyTls !== false
 }
 
 function showSettingsDialog() {
@@ -910,6 +913,8 @@ function showSettingsDialog() {
 }
 
 document.querySelector('#settings-button').addEventListener('click', showSettingsDialog)
+document.querySelector('#help-button').addEventListener('click', () => helpDialog.showModal())
+document.querySelectorAll('.close-help-dialog').forEach((button) => button.addEventListener('click', () => helpDialog.close()))
 document.querySelectorAll('.close-settings-dialog').forEach((button) => button.addEventListener('click', () => settingsDialog.close()))
 document.querySelector('#settings-form').addEventListener('submit', async (event) => {
   event.preventDefault()
@@ -920,7 +925,9 @@ document.querySelector('#settings-form').addEventListener('submit', async (event
       launchAtStartup: document.querySelector('#setting-launch-at-startup').checked,
       clipboardSuggest: document.querySelector('#setting-clipboard-suggest').checked,
       theme: document.querySelector('#setting-theme').value,
-      language: document.querySelector('#setting-language').value
+      language: document.querySelector('#setting-language').value,
+      proxyUrl: document.querySelector('#setting-proxy').value,
+      verifyTls: document.querySelector('#setting-verify-tls').checked
     })
     applyTheme(desktopSettings.theme)
     applyLanguage()
@@ -990,6 +997,14 @@ function activityLabel(entry) {
 
 document.querySelector('#activity-button').addEventListener('click', () => void showActivityDialog())
 document.querySelector('.close-activity-dialog').addEventListener('click', () => activityDialog.close())
+document.querySelector('#export-diagnostics').addEventListener('click', async () => {
+  try {
+    const target = await window.internetManager.exportDiagnostics()
+    if (target) showToast(desktopSettings.language === 'en' ? 'Diagnostics exported.' : 'Tanılama paketi dışa aktarıldı.')
+  } catch (error) {
+    showToast(error.message || (desktopSettings.language === 'en' ? 'Could not export diagnostics.' : 'Tanılama paketi oluşturulamadı.'))
+  }
+})
 document.querySelector('#activity-filter').addEventListener('change', () => void renderActivity())
 document.querySelector('#clear-activity').addEventListener('click', async () => {
   await window.internetManager.clearActivity()
@@ -1036,6 +1051,11 @@ document.querySelector('#open-transfer-file').addEventListener('click', async ()
 })
 
 document.addEventListener('keydown', (event) => {
+  if (event.key === 'F1') {
+    event.preventDefault()
+    if (!helpDialog.open) helpDialog.showModal()
+    return
+  }
   if (!event.ctrlKey || event.altKey) return
   if (event.key.toLowerCase() === 'n' && event.shiftKey) {
     event.preventDefault()
